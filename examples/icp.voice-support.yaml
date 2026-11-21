@@ -1,0 +1,69 @@
+# Example ICP: companies with enough inbound support volume that a voice agent
+# would pay for itself, and enough engineering to want to own the integration.
+name: Consumer brands scaling phone support
+description: >
+  B2C companies with a real contact centre, who are already hiring for
+  support operations or conversational AI and have not yet standardised
+  on a voice agent platform.
+
+offer:
+  product: Voice agent for customer support
+  oneLiner: An AI agent that answers the phone, resolves the issue and hands off cleanly when it cannot.
+  valueProps:
+    - Resolve routine calls without a queue
+    - Keep the same policies and tone on every call
+    - Hand off to a person with a summary instead of a cold transfer
+  proofPoints:
+    - Simulated callers gate every release, so regressions are caught before customers hear them
+
+company:
+  industries:
+    - e-commerce
+    - fintech
+    - consumer
+    - marketplace
+    - travel
+  keywords:
+    - customer support
+    - contact center
+    - customer experience
+  techSignals:
+    - twilio
+    - zendesk
+    - genesys
+    - five9
+    - amazon connect
+  hiringSignals:
+    - support operations
+    - customer experience
+    - conversational ai
+    - contact center
+    - voice
+  employees:
+    min: 100
+    max: 5000
+  stages: [series-b, growth, public]
+  regions: [united states, canada, united kingdom]
+
+personas:
+  - name: Support leader
+    seniority: [director, vp, c-level]
+    titleKeywords: [customer support, customer experience, customer care, cx]
+    painPoints:
+      - Call volume grows faster than headcount
+      - Handle time and CSAT move in opposite directions
+  - name: Engineering owner
+    seniority: [lead, manager, director]
+    titleKeywords: [conversational ai, support engineering, platform, contact center]
+    painPoints:
+      - The IVR is a pile of special cases nobody wants to touch
+      - Every bot change needs a manual regression pass
+
+exclusions:
+  domains: []
+  companies: []
+  keywords:
+    - agency
+    - outsourcing
+
+seeds: []

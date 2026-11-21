@@ -52,7 +52,7 @@ describe("cli", () => {
 
   it("validates a good profile", async () => {
     expect(await run(["icp", "validate", "icp.json"], io)).toBe(0);
-    expect(out).toBe("Test ICP: ok. 1 personas, 1 search terms, 0 seeds.\n");
+    expect(out).toBe("Test ICP: ok. 1 persona, 1 search term, 0 seeds.\n");
   });
 
   it("explains a bad profile and exits non-zero", async () => {
@@ -74,8 +74,8 @@ describe("cli", () => {
     expect(await run(["discover", "icp.json", "--only", "yc"], io)).toBe(0);
     expect(out).toContain("1. Helpline (helpline.example)  [yc]");
     expect(out).toContain("https://www.ycombinator.com/companies/helpline");
-    expect(out).toContain("1 candidates, 1 companies after merging, 0 excluded, 1 kept.");
-    expect(errOut).toContain("yc: 1 candidates");
+    expect(out).toContain("1 candidate, 1 company after merging, 0 excluded, 1 kept.");
+    expect(errOut).toContain("yc: 1 candidate\n");
   });
 
   it("prints only json on stdout with --json", async () => {

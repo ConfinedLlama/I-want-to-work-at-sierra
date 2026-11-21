@@ -7,7 +7,7 @@ import { discover, type DiscoveryEvent } from "../discovery/discover.js";
 import { loadIcp } from "../icp/load.js";
 import { createRegistry, listSources, UnknownSourceError } from "../sources/registry.js";
 import type { SourceContext } from "../sources/types.js";
-import { formatReport, formatSources } from "./format.js";
+import { count, formatReport, formatSources } from "./format.js";
 import { createRuntime } from "./runtime.js";
 
 export interface CliIo {
@@ -37,10 +37,13 @@ export async function run(argv: readonly string[], io: CliIo): Promise<number> {
       const loaded = await loadIcp(resolve(io.cwd, file));
       if (!loaded.ok) throw new UsageError(loaded.error.message);
       const profile = loaded.value;
+      const terms =
+        profile.company.keywords.length +
+        profile.company.hiringSignals.length +
+        profile.company.techSignals.length;
       io.stdout(
-        `${profile.name}: ok. ${profile.personas.length} personas, ` +
-          `${profile.company.keywords.length + profile.company.hiringSignals.length + profile.company.techSignals.length} search terms, ` +
-          `${profile.seeds.length} seeds.\n`,
+        `${profile.name}: ok. ${count(profile.personas.length, "persona")}, ` +
+          `${count(terms, "search term")}, ${count(profile.seeds.length, "seed")}.\n`,
       );
     });
 
@@ -134,15 +137,15 @@ function positiveInt(value: string): number {
 function progressLine(event: DiscoveryEvent): string {
   switch (event.type) {
     case "source-finished":
-      return `  ${event.source}: ${event.candidates} candidates`;
+      return `  ${event.source}: ${count(event.candidates, "candidate")}`;
     case "source-failed":
       return `  ${event.source}: failed, ${event.message}`;
     case "source-disabled":
       return `  ${event.source}: skipped for the rest of the run after ${event.failures} failures in a row`;
     case "merged":
-      return `  merged into ${event.prospects} companies, enriching the top ${event.kept}`;
+      return `  merged into ${count(event.prospects, "company", "companies")}, enriching the top ${event.kept}`;
     case "enriched":
-      return `  ${event.prospect}: ${event.signals} signals`;
+      return `  ${event.prospect}: ${count(event.signals, "signal")}`;
   }
 }
 

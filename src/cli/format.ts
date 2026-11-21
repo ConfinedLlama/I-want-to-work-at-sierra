@@ -17,6 +17,11 @@ export function formatSources(sources: readonly (SourceInfo & { role: string })[
     .join("\n\n");
 }
 
+/** "1 role", "2 roles". Pass the plural when it is not just an added s. */
+export function count(n: number, singular: string, plural = `${singular}s`): string {
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
 export function formatReport(report: DiscoveryReport): string {
   const { stats } = report;
   const lines: string[] = [];
@@ -29,15 +34,13 @@ export function formatReport(report: DiscoveryReport): string {
   });
 
   lines.push(
-    `${stats.candidates} candidates, ${stats.merged} companies after merging, ` +
+    `${count(stats.candidates, "candidate")}, ` +
+      `${count(stats.merged, "company", "companies")} after merging, ` +
       `${stats.excluded} excluded, ${stats.kept} kept.`,
   );
 
   if (report.failures.length > 0) {
-    lines.push(
-      "",
-      `${report.failures.length} source ${report.failures.length === 1 ? "failure" : "failures"}:`,
-    );
+    lines.push("", `${count(report.failures.length, "source failure")}:`);
     for (const failure of report.failures) {
       const about = failure.prospect === undefined ? "" : ` for ${failure.prospect}`;
       lines.push(`  - ${failure.message}${about}`);

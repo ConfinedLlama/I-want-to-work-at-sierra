@@ -1,0 +1,40 @@
+{
+  "name": "outbound",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Outbound engagement pipeline: ICP in, researched prospects and a voice-first sequence out.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "bin": {
+    "outbound": "./dist/cli/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "outbound": "tsx src/cli/main.ts"
+  },
+  "dependencies": {
+    "commander": "^15.1.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.15.0",
+    "prettier": "^3.10.1",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.1"
+  }
+}

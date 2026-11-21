@@ -49,7 +49,7 @@ describe("discover", () => {
             { name: "Both", domain: "both.com", signals: [signal("one", "b1", ["a"])] },
           ]),
           discovery("two", [
-            { name: "Both Inc", domain: "both.com", signals: [signal("two", "b2")] },
+            { name: "Both Inc", domain: "both.com", signals: [signal("two", "b2", ["b", "c"])] },
           ]),
         ],
         enrichment: [enrichment("jobs")],
@@ -62,6 +62,37 @@ describe("discover", () => {
     expect(report.prospects[0]?.signals.map((s) => s.summary)).toEqual(["b1", "b2", "found"]);
     expect(report.failures).toEqual([]);
     expect(report.stats).toEqual({ candidates: 3, merged: 2, excluded: 0, kept: 2 });
+  });
+
+  it("ranks on how much of the ICP matched, not on how much enrichment came back", async () => {
+    const report = await discover(
+      icp,
+      registry({
+        discovery: [
+          discovery("one", [
+            { name: "Relevant", domain: "relevant.com", signals: [signal("one", "r", ["a", "b"])] },
+            { name: "Busy", domain: "busy.com", signals: [signal("one", "x", ["a"])] },
+          ]),
+        ],
+        enrichment: [
+          // Busy has a big public footprint that says nothing about fit.
+          enrichment("repos", (company) =>
+            Promise.resolve(
+              ok(
+                company.domain === "busy.com"
+                  ? [signal("repos", "r1"), signal("repos", "r2"), signal("repos", "r3")]
+                  : [],
+              ),
+            ),
+          ),
+          enrichment("jobs", (company) =>
+            Promise.resolve(ok(company.domain === "busy.com" ? [signal("jobs", "j1")] : [])),
+          ),
+        ],
+      }),
+      context,
+    );
+    expect(report.prospects.map((prospect) => prospect.id)).toEqual(["relevant.com", "busy.com"]);
   });
 
   it("puts seeds first and hands their slugs to enrichment", async () => {

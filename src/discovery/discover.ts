@@ -153,15 +153,18 @@ function seedCandidate(seed: Icp["seeds"][number]): CompanyCandidate {
 }
 
 /**
- * A first-pass ordering, used to decide who is worth enriching. It is not the
- * fit score. It only asks how much independent evidence there is: named in the
- * ICP, seen by several sources, matching many distinct terms.
+ * A first-pass ordering, used to decide who is worth enriching and how to list
+ * the result. It is not the fit score.
+ *
+ * Distinct ICP terms matched comes before the number of sources. Counting
+ * sources first let a company with a busy GitHub org and a job board outrank a
+ * better fit that simply has less of a public footprint.
  */
 function byPromise(a: Prospect, b: Prospect): number {
   return (
     Number(b.seeded) - Number(a.seeded) ||
-    b.sources.length - a.sources.length ||
     matchedTerms(b) - matchedTerms(a) ||
+    b.sources.length - a.sources.length ||
     b.signals.length - a.signals.length ||
     a.id.localeCompare(b.id)
   );

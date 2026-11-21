@@ -161,12 +161,23 @@ describe("companyName", () => {
     expect(companyName(header)).toBe(expected);
   });
 
+  it("keeps real names that happen to contain a placeholder word", () => {
+    expect(companyName("Stealth Robotics | Engineer")).toBe("Stealth Robotics");
+    expect(companyName("The Browser Company | Engineer")).toBe("The Browser Company");
+    expect(companyName("Startup Weekend | Organizer")).toBe("Startup Weekend");
+  });
+
   it.each([
     "No pipes here",
     " | Engineer | Remote",
     "A | too short",
     `${"x".repeat(61)} | too long`,
     "--- | Engineer",
+    "Early-stage Startup | Software Engineer | Remote",
+    "Stealth | Founding Engineer",
+    "Stealth Startup (YC S25) | Engineer",
+    "A well-funded startup | Engineer",
+    "Confidential | Engineer",
   ])("rejects %j", (header) => {
     expect(companyName(header)).toBeUndefined();
   });

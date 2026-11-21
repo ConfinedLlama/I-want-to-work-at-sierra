@@ -141,7 +141,7 @@ function toCandidate(
       {
         kind: "hiring",
         source: info.id,
-        summary: `Who is hiring: ${truncate(header, 180)}`,
+        summary: `Who is hiring: ${truncate(header, 140)}`,
         url: `https://news.ycombinator.com/item?id=${comment.objectID}`,
         ...(comment.created_at == null ? {} : { observedAt: comment.created_at }),
         matched,
@@ -165,8 +165,17 @@ export function companyName(header: string): string | undefined {
     .trim();
   if (name.length < 2 || name.length > 60) return undefined;
   if (!/[a-z0-9]/i.test(name)) return undefined;
+  if (ANONYMOUS.test(name)) return undefined;
   return name;
 }
+
+/**
+ * Some posts hide who is hiring: "Stealth Startup | Engineer | Remote". There
+ * is no company to research there, and merging by name would fold every
+ * stealth post into one imaginary prospect.
+ */
+const ANONYMOUS =
+  /^(an?\s+)?((early|seed|late|growth)[\s-]stage|stealth([\s-]mode)?|well[\s-]funded|yc[\s-]backed|venture[\s-]backed|confidential|undisclosed|ai|new)?\s*(startup|company|stealth|confidential|undisclosed)$/i;
 
 /** Hosts that appear in job posts but are never the company's own site. */
 const NOT_A_COMPANY_SITE = [

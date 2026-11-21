@@ -1,0 +1,21 @@
+# Push gate config for https://github.com/kunchenguid/no-mistakes
+# Branches go through `git push no-mistakes <branch>` instead of straight to origin.
+# Everything funnels into scripts/check.sh so the gate, CI and a laptop all run
+# exactly the same commands.
+allow_repo_commands: true
+
+commands:
+  format: scripts/check.sh fix
+  lint: scripts/check.sh lint && scripts/check.sh typecheck
+  test: scripts/check.sh test
+
+commit:
+  fix_message: "fix({{.Step}}): {{.Summary}}"
+  trailers: []
+
+pr:
+  appendix: minimal
+
+ignore_patterns:
+  - pnpm-lock.yaml
+  - test/fixtures/**

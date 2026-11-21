@@ -4,6 +4,7 @@ import { err, ok, type Result } from "../core/result.js";
 import type { Icp } from "../icp/schema.js";
 import { extractUrls, htmlToText } from "../text/html.js";
 import { matchTerms } from "../text/match.js";
+import { truncate } from "../text/truncate.js";
 import { isExcluded } from "./exclusions.js";
 import {
   SourceError,
@@ -252,8 +253,4 @@ function safeDecode(value: string): string {
   } catch {
     return value;
   }
-}
-
-function truncate(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 }

@@ -4,6 +4,7 @@ import { err, ok, type Result } from "../core/result.js";
 import type { HttpError } from "../http/client.js";
 import type { Icp } from "../icp/schema.js";
 import { matchTerms } from "../text/match.js";
+import { truncate } from "../text/truncate.js";
 import { slugCandidates } from "./slug.js";
 import {
   SourceError,
@@ -18,6 +19,7 @@ const API = "https://api.github.com";
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 const RECENT_DAYS = 90;
 const MAX_REPO_SIGNALS = 5;
+const MAX_DESCRIPTION = 120;
 
 const Org = z.object({
   login: z.string(),
@@ -157,10 +159,8 @@ function toSignals(repos: readonly Repo[], orgUrl: string, icp: Icp, nowMs: numb
   described.sort((a, b) => b.matched.length - a.matched.length);
 
   for (const { repo, matched } of described.slice(0, MAX_REPO_SIGNALS)) {
-    const about =
-      repo.description == null || repo.description.trim() === ""
-        ? ""
-        : `: ${repo.description.trim()}`;
+    const description = repo.description?.trim() ?? "";
+    const about = description === "" ? "" : `: ${truncate(description, MAX_DESCRIPTION)}`;
     const language = repo.language == null ? "" : ` [${repo.language}]`;
     signals.push({
       kind: matched.length > 0 ? "tech" : "activity",

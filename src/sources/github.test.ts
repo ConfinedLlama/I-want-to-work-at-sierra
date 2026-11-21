@@ -75,6 +75,17 @@ describe("githubSource", () => {
     ]);
   });
 
+  it("keeps a long repo description to one readable line", async () => {
+    const { stub, context } = testContext();
+    stub.on(ORG, { body: org });
+    stub.on(REPOS, { body: [repo("scanner", { description: `  ${"word ".repeat(80)}` })] });
+    const signals = unwrap(await createGithubSource().enrich(acme, icp, context));
+    const summary = signals[1]?.summary ?? "";
+    expect(summary.startsWith("Active repo scanner: word word")).toBe(true);
+    expect(summary.endsWith("word\u2026 [TypeScript]")).toBe(true);
+    expect(summary.length).toBeLessThan(160);
+  });
+
   it("ignores forks, archived repos and anything not pushed recently", async () => {
     const { stub, context } = testContext();
     stub.on(ORG, { body: org });

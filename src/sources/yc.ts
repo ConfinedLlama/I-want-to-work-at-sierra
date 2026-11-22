@@ -143,7 +143,10 @@ function sizeFits(teamSize: number | null | undefined, icp: Icp): boolean {
 
 function regionFits(company: YcCompany, icp: Icp): boolean {
   if (icp.company.regions.length === 0) return true;
-  const where = [company.all_locations ?? "", ...(company.regions ?? [])].join(" ; ").trim();
+  // A tag such as "America / Canada" groups several places and is on most US
+  // companies. It names a country the company may not be in, so it is left out.
+  const places = (company.regions ?? []).filter((region) => !region.includes("/"));
+  const where = [company.all_locations ?? "", ...places].join(" ; ").trim();
   if (where === "" || where === ";") return true;
   return matchTerms(where, icp.company.regions).length > 0;
 }

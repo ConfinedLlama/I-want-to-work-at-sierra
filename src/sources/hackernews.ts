@@ -26,6 +26,13 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 /** Each term is one search request, so a long ICP does not turn into a burst. */
 const MAX_TERMS = 8;
 
+/**
+ * The most the search API returns in one response. A thread has a few hundred
+ * posts and a common term matches most of them, so anything smaller would cut
+ * a term short without saying so.
+ */
+const HITS_PER_PAGE = 1000;
+
 const Stories = z.object({
   hits: z.array(z.object({ objectID: z.string(), title: z.string().nullish() })),
 });
@@ -87,7 +94,7 @@ export const hackerNewsSource: DiscoverySource = {
     for (const term of searched) {
       const query = encodeURIComponent(`"${term}"`);
       const page = await context.http.getJson(
-        `${API}/search?tags=comment,story_${thread.objectID}&query=${query}&hitsPerPage=100`,
+        `${API}/search?tags=comment,story_${thread.objectID}&query=${query}&hitsPerPage=${HITS_PER_PAGE}`,
         Comments,
         { cacheTtlMs: ONE_HOUR_MS },
       );
@@ -166,8 +173,10 @@ function toCandidate(
 export function companyName(header: string): string | undefined {
   if (!header.includes("|")) return undefined;
   const name = (header.split("|")[0] ?? "")
-    .replace(/https?:\/\/\S+/g, "")
+    // Brackets go first. A URL inside them runs up to the closing bracket, and
+    // removing the URL first would take that bracket with it.
     .replace(/\([^)]*\)/g, "")
+    .replace(/https?:\/\/\S+/g, "")
     .replace(/\s+/g, " ")
     .replace(/[\s:,-]+$/, "")
     .trim();
@@ -223,6 +232,16 @@ const NOT_A_COMPANY_SITE = [
   "airtable.com",
   "cal.com",
   "gem.com",
+  "grnh.se",
+  "workatastartup.com",
+  "nordictechjobs.com",
+  "tally.so",
+  "applytojob.com",
+  "teamtailor.com",
+  "factorialhr.com",
+  "personio.com",
+  "dover.com",
+  "deel.com",
 ];
 
 const BOARD_HOSTS: Readonly<Record<string, keyof CompanySlugs>> = {
@@ -251,7 +270,9 @@ const IS_NAME = 2;
  * domain would fold every company that links to it into a single prospect.
  */
 function nameMatch(domain: string, company: string): number {
-  const label = registrableLabel(domain);
+  // A name is squashed to letters and digits, so the label has to be too:
+  // egg-ai.com is EggAI's own address.
+  const label = registrableLabel(domain)?.replace(/-/g, "");
   const words = normalizeCompanyName(company).split(" ");
   const name = words.join("");
   if (label === undefined || name === "") return NOT_NAMED;

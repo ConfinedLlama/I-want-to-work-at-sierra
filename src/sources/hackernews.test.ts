@@ -31,6 +31,10 @@ function comment(objectID: string, comment_text: string, overrides: Record<strin
   };
 }
 
+function link(url: string) {
+  return `<a href="${url}">${url}</a>`;
+}
+
 const helpline = comment(
   "1",
   'Helpline (YC W22) | Voice Engineer | Remote (US) | <a href="https:&#x2F;&#x2F;www.helpline.example&#x2F;careers">https://www.helpline.example/car...</a><p>We build voice agents for customer support teams.<p>Apply: <a href="https:&#x2F;&#x2F;jobs.ashbyhq.com&#x2F;Helpline&#x2F;abc">https://jobs.ashbyhq.com/Helpline/abc</a>',
@@ -72,9 +76,23 @@ describe("hackerNewsSource", () => {
     const { stub } = await discover([]);
     const searches = stub.calls.map((call) => call.url).filter((url) => url.startsWith(SEARCH));
     expect(searches).toEqual([
-      `${SEARCH}tags=comment,story_${THREAD}&query=%22voice%22&hitsPerPage=100`,
-      `${SEARCH}tags=comment,story_${THREAD}&query=%22customer%20support%22&hitsPerPage=100`,
+      `${SEARCH}tags=comment,story_${THREAD}&query=%22voice%22&hitsPerPage=1000`,
+      `${SEARCH}tags=comment,story_${THREAD}&query=%22customer%20support%22&hitsPerPage=1000`,
     ]);
+  });
+
+  it("reads every post a term finds on a busy thread, not only the first hundred", async () => {
+    const posts = Array.from({ length: 140 }, (_, index) =>
+      comment(String(1000 + index), `Northwind ${index} | Voice Engineer | Remote`),
+    );
+    const { stub, context } = testContext();
+    stub.on(STORIES, { body: stories });
+    // Like the real API, hand back no more hits than the request asked for.
+    stub.on(SEARCH, (url) => {
+      const asked = Number(new URL(url).searchParams.get("hitsPerPage"));
+      return { body: { hits: posts.slice(0, asked) } };
+    });
+    expect(unwrap(await hackerNewsSource.discover(icp, context))).toHaveLength(140);
   });
 
   it("returns each comment once even when several terms find it", async () => {
@@ -159,7 +177,6 @@ describe("hackerNewsSource", () => {
         domains: ["rippling.com", "google.com", "github.com", "lever.co", "stripe.com"],
       },
     });
-    const link = (url: string) => `<a href="${url}">${url}</a>`;
     const { found } = await discover(
       [
         comment(
@@ -189,6 +206,59 @@ describe("hackerNewsSource", () => {
       "Delta",
       "Epsilon",
     ]);
+  });
+
+  it("drops a post whose excluded site is hyphenated where its name is not", async () => {
+    const excluding = testIcp({
+      company: { keywords: ["customer support"], hiringSignals: ["voice"] },
+      exclusions: { domains: ["egg-ai.com"] },
+    });
+    const { found } = await discover(
+      [
+        comment(
+          "21",
+          `EggAI | Voice Engineer | Remote<p>${link("https://egg-ai.com")} ${link("https://technews.example/eggai-raises")}`,
+        ),
+        comment("11", "Northwind | Voice Engineer | Remote"),
+      ],
+      excluding,
+    );
+    expect(found.map((candidate) => candidate.name)).toEqual(["Northwind"]);
+  });
+
+  it("keeps a post whose only link is its page on an excluded hiring platform", async () => {
+    const excluding = testIcp({
+      company: { keywords: ["customer support"], hiringSignals: ["voice"] },
+      exclusions: { domains: ["teamtailor.com"] },
+    });
+    const { found } = await discover(
+      [
+        comment(
+          "22",
+          `Acme | Voice Engineer | Remote<p>${link("https://acme.teamtailor.com/jobs")}`,
+        ),
+      ],
+      excluding,
+    );
+    expect(found.map((candidate) => candidate.name)).toEqual(["Acme"]);
+  });
+
+  it("drops a post that links its excluded site next to a job link shortener", async () => {
+    const excluding = testIcp({
+      company: { keywords: ["customer support"], hiringSignals: ["voice"] },
+      exclusions: { domains: ["abc.xyz"] },
+    });
+    const { found } = await discover(
+      [
+        comment(
+          "23",
+          `Alphabet | Voice Engineer | Remote<p>${link("https://abc.xyz/careers")} ${link("https://grnh.se/abc123")}`,
+        ),
+        comment("11", "Northwind | Voice Engineer | Remote"),
+      ],
+      excluding,
+    );
+    expect(found.map((candidate) => candidate.name)).toEqual(["Northwind"]);
   });
 
   it("does not fail on a comment field it never reads", async () => {
@@ -275,6 +345,8 @@ describe("companyName", () => {
     ["Acme Robotics, Inc. | SF", "Acme Robotics, Inc."],
     ["Acme https://acme.com | Engineer", "Acme"],
     ["Acme - | Engineer", "Acme"],
+    ["Baserow (https://baserow.io) | Senior Backend Engineer | Remote", "Baserow"],
+    ["ParadeDB (YC S23, https://paradedb.com) | Founding Engineer | SF", "ParadeDB"],
   ])("reads %j", (header, expected) => {
     expect(companyName(header)).toBe(expected);
   });
@@ -329,6 +401,32 @@ describe("classifyLinks", () => {
 
   it("accepts a site whose name wraps the company's", () => {
     expect(classifyLinks(["https://usepylon.com/careers"], "Pylon").domain).toBe("usepylon.com");
+  });
+
+  it.each([
+    ["EggAI", "https://egg-ai.com/careers", "egg-ai.com"],
+    ["AssumeAI", "https://www.assume-ai.com", "assume-ai.com"],
+    ["ko-br", "https://ko-br.com/jobs", "ko-br.com"],
+  ])("takes a hyphenated domain as the site of %s", (company, url, expected) => {
+    expect(classifyLinks([url, "https://technews.example/funding"], company)).toMatchObject({
+      domain: expected,
+      ownSites: [expected],
+    });
+  });
+
+  it.each([
+    "https://grnh.se/abc123",
+    "https://www.workatastartup.com/jobs/1",
+    "https://nordictechjobs.com/job/1",
+    "https://tally.so/r/abc",
+    "https://acme.applytojob.com/apply",
+    "https://acme.teamtailor.com/jobs",
+    "https://acme.factorialhr.com",
+    "https://acme.jobs.personio.com",
+    "https://app.dover.com/jobs/acme",
+    "https://jobs.deel.com/acme",
+  ])("does not count the shared hiring host in %s as the company's own site", (url) => {
+    expect(classifyLinks([url], "Acme").ownSites).toEqual([]);
   });
 
   it("accepts a site named for the leading words of the company", () => {

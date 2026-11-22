@@ -129,6 +129,25 @@ describe("ycSource", () => {
     expect(found.map((candidate) => candidate.name)).toEqual(["Nowhere"]);
   });
 
+  it("does not read a tag that groups several places as the country it mentions", async () => {
+    const found = await discover(
+      [
+        company({
+          name: "Stateside",
+          all_locations: "San Francisco, CA, USA",
+          regions: ["United States of America", "America / Canada"],
+        }),
+        company({
+          name: "Northern",
+          all_locations: "Toronto, ON, Canada",
+          regions: ["Canada", "America / Canada"],
+        }),
+      ],
+      testIcp({ company: { keywords: ["customer support"], regions: ["canada"] } }),
+    );
+    expect(found.map((candidate) => candidate.name)).toEqual(["Northern"]);
+  });
+
   it("drops excluded companies", async () => {
     const found = await discover([
       company({ long_description: "A customer support agency for hire." }),

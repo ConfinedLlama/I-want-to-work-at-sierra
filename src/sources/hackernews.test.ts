@@ -152,6 +152,45 @@ describe("hackerNewsSource", () => {
     expect(found.map((candidate) => candidate.name)).toEqual(["Northwind"]);
   });
 
+  it("keeps a post that only links to something an excluded company hosts", async () => {
+    const excluding = testIcp({
+      company: { keywords: ["customer support"], hiringSignals: ["voice"] },
+      exclusions: {
+        domains: ["rippling.com", "google.com", "github.com", "lever.co", "stripe.com"],
+      },
+    });
+    const link = (url: string) => `<a href="${url}">${url}</a>`;
+    const { found } = await discover(
+      [
+        comment(
+          "16",
+          `Acme | Voice Engineer | Remote<p>${link("https://ats.rippling.com/acme/jobs")}`,
+        ),
+        comment(
+          "17",
+          `Beta | Voice Engineer | Remote<p>${link("https://docs.google.com/forms/d/abc")} ${link("https://beta.dev")}`,
+        ),
+        comment(
+          "18",
+          `Gamma | Voice Engineer | Remote<p>${link("https://github.com/gamma")} ${link("https://gamma.io")}`,
+        ),
+        comment("19", `Delta | Voice Engineer | Remote<p>${link("https://jobs.lever.co/delta")}`),
+        comment(
+          "20",
+          `Epsilon | Voice Engineer | Remote<p>${link("https://stripe.com/docs")} ${link("https://epsilon.ai")}`,
+        ),
+      ],
+      excluding,
+    );
+    expect(found.map((candidate) => candidate.name)).toEqual([
+      "Acme",
+      "Beta",
+      "Gamma",
+      "Delta",
+      "Epsilon",
+    ]);
+  });
+
   it("does not fail on a comment field it never reads", async () => {
     const { found } = await discover([
       comment("12", "Quiet Co | Voice Engineer | Onsite", { story_id: "5000" }),
@@ -345,23 +384,38 @@ describe("classifyLinks", () => {
     ).toBe("scale.com");
   });
 
-  it("lists every host a post links to, whatever becomes of the link", () => {
-    const { domain, hosts } = classifyLinks(
+  it("counts a host named for the company as its own, even one never taken as a domain", () => {
+    expect(classifyLinks(["https://www.google.com/about/careers"], "Google")).toMatchObject({
+      domain: undefined,
+      ownSites: ["google.com"],
+    });
+    expect(classifyLinks(["https://jobs.lever.co/lever"], "Lever").ownSites).toEqual([
+      "jobs.lever.co",
+    ]);
+  });
+
+  it("counts the only site in a post as the company's own, named for it or not", () => {
+    const { domain, ownSites } = classifyLinks(
       [
         "https://www.linkedin.com/company/alphabet",
         "https://abc.xyz/careers",
+        "https://careers.abc.xyz/apply",
         "https://boards.greenhouse.io/alphabet",
-        "https://www.alphabet.example",
       ],
       "Alphabet",
     );
-    expect(domain).toBe("alphabet.example");
-    expect(hosts).toEqual([
-      "linkedin.com",
-      "abc.xyz",
-      "boards.greenhouse.io",
-      "alphabet.example",
-    ]);
+    expect(domain).toBeUndefined();
+    expect(ownSites).toEqual(["abc.xyz", "careers.abc.xyz"]);
+  });
+
+  it("does not count someone else's site or platform as the company's own", () => {
+    expect(classifyLinks(["https://stripe.com/docs", "https://epsilon.ai"], "Epsilon")).toEqual({
+      domain: "epsilon.ai",
+      slugs: {},
+      ownSites: ["epsilon.ai"],
+    });
+    expect(classifyLinks(["https://ats.rippling.com/acme/jobs"], "Acme").ownSites).toEqual([]);
+    expect(classifyLinks(["https://github.com/gamma"], "Gamma").ownSites).toEqual([]);
   });
 
   it("leaves the domain unset when every link is someone else's site", () => {

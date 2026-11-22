@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { normalizeCompanyName, normalizeDomain, registrableLabel } from "../core/domain.js";
+import {
+  normalizeCompanyName,
+  normalizeDomain,
+  registrableDomain,
+  registrableLabel,
+} from "../core/domain.js";
 import { err, ok, type Result } from "../core/result.js";
 import { isExcluded } from "../icp/exclusions.js";
 import type { Icp } from "../icp/schema.js";
@@ -127,13 +132,13 @@ function toCandidate(
   const matched = matchTerms(text, terms);
   if (matched.length === 0) return undefined;
 
-  const { domain, slugs, hosts } = classifyLinks(extractUrls(html), name);
+  const { domain, slugs, ownSites } = classifyLinks(extractUrls(html), name);
   const description = rest.join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
   if (isExcluded(icp, { name, description: text })) return undefined;
-  // An excluded domain rules the post out wherever it is linked. The company's
-  // own site is not always the link that ends up as its domain, and for the
-  // owner of a host we never take as a company site it is the only link there is.
-  if (hosts.some((host) => isExcluded(icp, { name, domain: host }))) return undefined;
+  // An excluded domain rules the post out when it is the poster's own site,
+  // which is not always the link kept as its domain. Linking to an excluded
+  // company's board, form or repository does not make the poster that company.
+  if (ownSites.some((site) => isExcluded(icp, { name, domain: site }))) return undefined;
 
   return {
     name,
@@ -263,8 +268,9 @@ function nameMatch(domain: string, company: string): number {
  * board". A board link is as useful as a domain: it gives us the exact slug to
  * query later, with no guessing.
  *
- * `hosts` is every host the post links to, including the ones that are never
- * taken as a company's site.
+ * `ownSites` is every linked host that is plausibly the poster's own: one
+ * named for the company, on whatever kind of host, or the only site in the
+ * post that is neither a board nor a platform many companies share.
  */
 export function classifyLinks(
   urls: readonly string[],
@@ -272,12 +278,13 @@ export function classifyLinks(
 ): {
   domain: string | undefined;
   slugs: CompanySlugs;
-  hosts: readonly string[];
+  ownSites: readonly string[];
 } {
   let domain: string | undefined;
   let best = NOT_NAMED;
   const slugs: { -readonly [K in keyof CompanySlugs]: string } = {};
-  const hosts: string[] = [];
+  const named: string[] = [];
+  const sites: string[] = [];
 
   for (const url of urls) {
     let parsed: URL;
@@ -288,7 +295,8 @@ export function classifyLinks(
     }
     const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
     const site = normalizeDomain(host);
-    if (site !== undefined) hosts.push(site);
+    const match = site === undefined ? NOT_NAMED : nameMatch(site, company);
+    if (site !== undefined && match > NOT_NAMED) named.push(site);
 
     const platform = BOARD_HOSTS[host];
     if (platform !== undefined) {
@@ -306,16 +314,18 @@ export function classifyLinks(
     if (NOT_A_COMPANY_SITE.some((other) => host === other || host.endsWith(`.${other}`))) continue;
 
     if (site === undefined) continue;
+    sites.push(site);
 
     // The first link wins among equals, but a site named exactly for the
     // company beats an earlier one that only resembles the name.
-    const match = nameMatch(site, company);
     if (match > best) {
       domain = site;
       best = match;
     }
   }
-  return { domain, slugs, hosts };
+
+  const onlySite = new Set(sites.map(registrableDomain)).size === 1 ? sites : [];
+  return { domain, slugs, ownSites: [...new Set([...named, ...onlySite])] };
 }
 
 /** decodeURIComponent throws on a stray "%". A slug with one is used as written. */

@@ -89,8 +89,10 @@ export async function discover(
   sourced.push(...found.flat());
 
   const merged = mergeCandidates(sourced);
-  // Checked again after merging: a second source may have supplied the domain
-  // or description that the exclusion applies to.
+  // Checked again on the merged record, which can hold more than any one
+  // candidate did. It only sees what the sources let through: a candidate a
+  // source dropped is gone, along with the domain or description that showed
+  // why, so this does not stop the same company arriving from another source.
   const allowed = merged.filter((prospect) => prospect.seeded || !isExcluded(icp, prospect));
   const kept = [...allowed].sort(byPromise).slice(0, maxProspects);
   emit({ type: "merged", prospects: merged.length, kept: kept.length });

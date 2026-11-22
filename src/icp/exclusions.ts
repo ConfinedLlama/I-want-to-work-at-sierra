@@ -3,9 +3,13 @@ import { matchesAny } from "../text/match.js";
 import type { Icp } from "./schema.js";
 
 /**
- * Whether the ICP rules this company out. Checked by sources as early as
- * possible, and again by discovery after merging, because a company can gain
- * a domain or description from a second source that the first one lacked.
+ * Whether the ICP rules this company out, going by what the caller knows about
+ * it. Sources check as early as possible and discovery checks the merged
+ * record again.
+ *
+ * Neither check sees across sources. A source that drops a candidate drops its
+ * evidence too, so the same company can still come through another source
+ * that has no domain or description for it. ROADMAP.md lists that gap.
  */
 export function isExcluded(
   icp: Icp,

@@ -22,6 +22,8 @@ Known gaps, found by running it against live data:
 - [ ] Ties in the pre-enrichment ranking fall back to alphabetical order, which decides who makes the cut when `--max` is small.
 - [ ] Without a token GitHub allows about 30 companies an hour.
   The report should say when enrichment stopped early for that reason.
+- [ ] Exclusions are applied inside each source, so a company one source drops can still come through another that lacks the evidence.
+  An excluded domain removes the YC entry, but a Hacker News post from the same company that links only its job board is listed.
 
 ## 2. Research
 

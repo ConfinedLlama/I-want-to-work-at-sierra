@@ -16,14 +16,14 @@ Each milestone should leave the pipeline runnable end to end up to that stage, w
 Known gaps, found by running it against live data:
 
 - [ ] A guessed job board slug is not verified.
-  `acme` on Greenhouse could be a different Acme.
-  GitHub already checks the org's website against the domain, and the boards need an equivalent.
+      `acme` on Greenhouse could be a different Acme.
+      GitHub already checks the org's website against the domain, and the boards need an equivalent.
 - [ ] Hacker News posts carry no structured location, so the ICP's regions are not applied to them.
 - [ ] Ties in the pre-enrichment ranking fall back to alphabetical order, which decides who makes the cut when `--max` is small.
 - [ ] Without a token GitHub allows about 30 companies an hour.
-  The report should say when enrichment stopped early for that reason.
+      The report should say when enrichment stopped early for that reason.
 - [ ] Exclusions are applied inside each source, so a company one source drops can still come through another that lacks the evidence.
-  An excluded domain removes the YC entry, but a Hacker News post from the same company that links only its job board is listed.
+      An excluded domain removes the YC entry, but a Hacker News post from the same company that links only its job board is listed.
 
 ## 2. Research
 

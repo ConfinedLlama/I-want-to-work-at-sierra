@@ -34,7 +34,6 @@ const Repos = z.array(
     description: z.string().nullish(),
     language: z.string().nullish(),
     pushed_at: z.string().nullish(),
-    stargazers_count: z.number().nullish(),
     fork: z.boolean().nullish(),
     archived: z.boolean().nullish(),
     topics: z.array(z.string()).nullish(),
@@ -87,6 +86,7 @@ export function createGithubSource(options: GithubSourceOptions = {}): Enrichmen
         const org = await context.http.getJson(`${API}/orgs/${encodeURIComponent(slug)}`, Org, {
           headers,
           cacheTtlMs: SIX_HOURS_MS,
+          cacheNotFound: true,
         });
         if (!org.ok) {
           if (org.error.status === 404) continue;

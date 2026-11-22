@@ -104,6 +104,14 @@ describe("greenhouseSource", () => {
     expect(unwrap(await greenhouseSource.enrich(acme, icp, context))).toEqual([]);
   });
 
+  it("remembers that a slug has no board, so a rerun does not ask again", async () => {
+    const { stub, context } = testContext({ cache: true });
+    stub.on("https://boards-api.greenhouse.io/", { status: 404 });
+    await greenhouseSource.enrich(acme, icp, context);
+    await greenhouseSource.enrich(acme, icp, context);
+    expect(stub.calls).toHaveLength(1);
+  });
+
   it("uses an explicit slug and nothing else", async () => {
     const { stub, context } = testContext();
     stub.on("https://boards-api.greenhouse.io/", { status: 404 });

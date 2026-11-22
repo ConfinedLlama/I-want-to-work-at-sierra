@@ -149,4 +149,11 @@ describe("ycSource", () => {
     expect(result.error.message).toBe("[yc] could not fetch the directory");
     expect(result.error.source).toBe("yc");
   });
+
+  it("asks again after a 404 from the directory instead of remembering it", async () => {
+    const { stub, context } = testContext({ cache: true });
+    stub.on(URL, [{ status: 404 }, { body: [company()] }]);
+    expect((await ycSource.discover(icp, context)).ok).toBe(false);
+    expect(unwrap(await ycSource.discover(icp, context))).toHaveLength(1);
+  });
 });

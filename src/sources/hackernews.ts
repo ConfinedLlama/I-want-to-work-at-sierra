@@ -32,7 +32,6 @@ const Comments = z.object({
       comment_text: z.string().nullish(),
       created_at: z.string().nullish(),
       parent_id: z.number().nullish(),
-      story_id: z.number().nullish(),
     }),
   ),
 });
@@ -128,9 +127,12 @@ function toCandidate(
   const matched = matchTerms(text, terms);
   if (matched.length === 0) return undefined;
 
-  const { domain, slugs } = classifyLinks(extractUrls(html), name);
+  const { domain, slugs, sites } = classifyLinks(extractUrls(html), name);
   const description = rest.join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
-  if (isExcluded(icp, { name, domain, description: text })) return undefined;
+  if (isExcluded(icp, { name, description: text })) return undefined;
+  // An excluded domain rules the post out wherever it is linked. The company's
+  // own site is not always the link that ends up as its domain.
+  if (sites.some((site) => isExcluded(icp, { name, domain: site }))) return undefined;
 
   return {
     name,
@@ -205,6 +207,16 @@ const NOT_A_COMPANY_SITE = [
   "wikipedia.org",
   "arxiv.org",
   "techcrunch.com",
+  "bit.ly",
+  "goo.gl",
+  "tinyurl.com",
+  "t.co",
+  "lnkd.in",
+  "forms.gle",
+  "typeform.com",
+  "airtable.com",
+  "cal.com",
+  "gem.com",
 ];
 
 const BOARD_HOSTS: Readonly<Record<string, keyof CompanySlugs>> = {
@@ -214,31 +226,44 @@ const BOARD_HOSTS: Readonly<Record<string, keyof CompanySlugs>> = {
   "jobs.ashbyhq.com": "ashby",
 };
 
-/** Fewer shared characters than this prove nothing: "t" and "io" are inside most names. */
+/** A shared stretch shorter than this proves nothing: "ai" and "go" open and close many names. */
 const MIN_NAME_OVERLAP = 3;
 
+const NOT_NAMED = 0;
+const RESEMBLES_NAME = 1;
+const IS_NAME = 2;
+
 /**
- * Whether a domain reads as the company's own: the label the owner registered
- * and the company's name have to contain one another, as "usepylon" does for
- * Pylon and "acme" does for Acme Robotics. Posts also link to forms, link
- * shorteners, press and career pages hosted by someone else, and a domain is
- * what companies are merged on, so one of those would fold every company that
- * links to it into a single prospect.
+ * How strongly a domain reads as the company's own, going by the label its
+ * owner registered. The label has to line up with whole words of the name: be
+ * the name ("acme" for Acme), be its leading words ("scale" for Scale AI), or
+ * wrap all of it ("usepylon" for Pylon). An overlap anywhere else is chance,
+ * as "bit" is in Bitwarden.
+ *
+ * Posts also link to forms, press and career pages hosted by someone else, and
+ * a domain is what companies are merged on, so one of those taken as the
+ * domain would fold every company that links to it into a single prospect.
  */
-function namedFor(domain: string, company: string): boolean {
+function nameMatch(domain: string, company: string): number {
   const label = registrableLabel(domain);
-  if (label === undefined) return false;
-  const name = normalizeCompanyName(company).replace(/ /g, "");
-  const labelIsShorter = label.length < name.length;
-  const shorter = labelIsShorter ? label : name;
-  const longer = labelIsShorter ? name : label;
-  return shorter.length < MIN_NAME_OVERLAP ? shorter === longer : longer.includes(shorter);
+  const words = normalizeCompanyName(company).split(" ");
+  const name = words.join("");
+  if (label === undefined || name === "") return NOT_NAMED;
+  if (label === name) return IS_NAME;
+
+  const leadingWords = words.map((_, index) => words.slice(0, index + 1).join(""));
+  const wrapsName = label.startsWith(name) || label.endsWith(name);
+  const shared = leadingWords.includes(label) ? label : wrapsName ? name : "";
+  return shared.length >= MIN_NAME_OVERLAP ? RESEMBLES_NAME : NOT_NAMED;
 }
 
 /**
  * Sort the links in a post into "this is their site" and "this is their job
  * board". A board link is as useful as a domain: it gives us the exact slug to
  * query later, with no guessing.
+ *
+ * `sites` is every linked site that could be the company's, whether or not it
+ * is named for it.
  */
 export function classifyLinks(
   urls: readonly string[],
@@ -246,9 +271,12 @@ export function classifyLinks(
 ): {
   domain: string | undefined;
   slugs: CompanySlugs;
+  sites: readonly string[];
 } {
   let domain: string | undefined;
+  let best = NOT_NAMED;
   const slugs: { -readonly [K in keyof CompanySlugs]: string } = {};
+  const sites: string[] = [];
 
   for (const url of urls) {
     let parsed: URL;
@@ -275,9 +303,18 @@ export function classifyLinks(
     if (NOT_A_COMPANY_SITE.some((other) => host === other || host.endsWith(`.${other}`))) continue;
 
     const site = normalizeDomain(host);
-    if (site !== undefined && namedFor(site, company)) domain ??= site;
+    if (site === undefined) continue;
+    sites.push(site);
+
+    // The first link wins among equals, but a site named exactly for the
+    // company beats an earlier one that only resembles the name.
+    const match = nameMatch(site, company);
+    if (match > best) {
+      domain = site;
+      best = match;
+    }
   }
-  return { domain, slugs };
+  return { domain, slugs, sites };
 }
 
 /** decodeURIComponent throws on a stray "%". A slug with one is used as written. */

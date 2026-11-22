@@ -151,6 +151,22 @@ describe("githubSource", () => {
     expect(unwrap(await createGithubSource().enrich(acme, icp, context))).toEqual([]);
   });
 
+  it("remembers that a slug has no org, so a rerun does not ask again", async () => {
+    const { stub, context } = testContext({ cache: true });
+    stub.on("https://api.github.com/orgs/", { status: 404 });
+    const source = createGithubSource();
+    await source.enrich(acme, icp, context);
+    await source.enrich(acme, icp, context);
+    expect(stub.calls).toHaveLength(1);
+  });
+
+  it("does not fail on a repo field it never reads", async () => {
+    const { stub, context } = testContext();
+    stub.on(ORG, { body: org });
+    stub.on(REPOS, { body: [repo("web", { stargazers_count: "1.2k" })] });
+    expect(unwrap(await createGithubSource().enrich(acme, icp, context))).toHaveLength(2);
+  });
+
   it("sends the token when given one, and never an empty header", async () => {
     const withToken = testContext();
     withToken.stub.on(ORG, { status: 404 });

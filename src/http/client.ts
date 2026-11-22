@@ -42,12 +42,15 @@ export interface HttpClientOptions {
 
 export interface RequestOptions {
   readonly headers?: Readonly<Record<string, string>>;
-  /**
-   * Serve from cache when a copy newer than this exists. Omit to skip the cache.
-   * A 404 is remembered for as long, so a slug with nothing behind it is asked
-   * about once and not on every rerun.
-   */
+  /** Serve from cache when a copy newer than this exists. Omit to skip the cache. */
   readonly cacheTtlMs?: number;
+  /**
+   * Remember a 404 for as long as `cacheTtlMs` too. Only for lookups where
+   * "nothing here" is an answer, such as a guessed slug. From a fixed endpoint
+   * a 404 is an outage, and remembering it would keep the source down on every
+   * rerun until the entry expired.
+   */
+  readonly cacheNotFound?: boolean;
 }
 
 const NOT_FOUND = 404;
@@ -156,8 +159,9 @@ export class HttpClient {
       }
 
       lastError = outcome.error.error;
-      // "Nothing here" is an answer too, and for a guessed slug it is the usual one.
-      if (lastError.status === NOT_FOUND) await remember(NOT_FOUND, "");
+      if (lastError.status === NOT_FOUND && options.cacheNotFound === true) {
+        await remember(NOT_FOUND, "");
+      }
       if (!outcome.error.retryable || attempt === this.maxRetries) break;
       await this.clock.sleep(this.delayFor(attempt, outcome.error.retryAfterMs));
     }

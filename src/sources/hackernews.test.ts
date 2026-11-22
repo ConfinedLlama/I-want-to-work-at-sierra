@@ -104,6 +104,35 @@ describe("hackerNewsSource", () => {
     expect(found).toEqual([]);
   });
 
+  it("drops a post that links an excluded domain not named for the company", async () => {
+    const excluding = testIcp({
+      company: { keywords: ["customer support"], hiringSignals: ["voice"] },
+      exclusions: { domains: ["abc.xyz", "getdx.com"] },
+    });
+    const { found } = await discover(
+      [
+        comment(
+          "9",
+          'Alphabet | Voice Engineer | Remote<p><a href="https:&#x2F;&#x2F;abc.xyz&#x2F;careers">https://abc.xyz/careers</a>',
+        ),
+        comment(
+          "10",
+          'DX | Voice Engineer | Remote<p><a href="https:&#x2F;&#x2F;getdx.com&#x2F;jobs">https://getdx.com/jobs</a>',
+        ),
+        comment("11", "Northwind | Voice Engineer | Remote"),
+      ],
+      excluding,
+    );
+    expect(found.map((candidate) => candidate.name)).toEqual(["Northwind"]);
+  });
+
+  it("does not fail on a comment field it never reads", async () => {
+    const { found } = await discover([
+      comment("12", "Quiet Co | Voice Engineer | Onsite", { story_id: "5000" }),
+    ]);
+    expect(found).toHaveLength(1);
+  });
+
   it("keeps a post with no links, without a domain", async () => {
     const { found } = await discover([comment("6", "Quiet Co | Voice Engineer | Onsite")]);
     expect(found).toHaveLength(1);
@@ -163,6 +192,14 @@ describe("hackerNewsSource", () => {
     stub.on(STORIES, { status: 503 });
     const result = await hackerNewsSource.discover(icp, context);
     expect(result.ok).toBe(false);
+  });
+
+  it("asks again after a 404 from the search api instead of remembering it", async () => {
+    const { stub, context } = testContext({ cache: true });
+    stub.on(STORIES, [{ status: 404 }, { body: stories }]);
+    stub.on(SEARCH, { body: { hits: [helpline] } });
+    expect((await hackerNewsSource.discover(icp, context)).ok).toBe(false);
+    expect(unwrap(await hackerNewsSource.discover(icp, context))).toHaveLength(1);
   });
 });
 
@@ -227,6 +264,73 @@ describe("classifyLinks", () => {
 
   it("accepts a site whose name wraps the company's", () => {
     expect(classifyLinks(["https://usepylon.com/careers"], "Pylon").domain).toBe("usepylon.com");
+  });
+
+  it("accepts a site named for the leading words of the company", () => {
+    expect(classifyLinks(["https://scale.com/careers"], "Scale AI").domain).toBe("scale.com");
+    expect(
+      classifyLinks(["https://thebrowser.company/careers"], "The Browser Company").domain,
+    ).toBe("thebrowser.company");
+  });
+
+  it.each([
+    ["Bitwarden", "https://bit.ly/3xYz"],
+    ["BitGo", "https://bit.ly/abc"],
+    ["Scale AI", "https://cal.com/x"],
+    ["Formstack", "https://forms.gle/abc"],
+    ["Goodnotes", "https://goo.gl/abc"],
+    ["Gemini", "https://jobs.gem.com/gemini"],
+  ])("does not give %s the third-party link %s as its domain", (company, url) => {
+    expect(classifyLinks([url], company).domain).toBeUndefined();
+  });
+
+  it.each([
+    ["Bitwarden", "https://bit.example/3xYz"],
+    ["Scale AI", "https://cal.example/x"],
+    ["Formstack", "https://forms.example/abc"],
+    ["Gemini", "https://jobs.gem.example/gemini"],
+    ["Acme Robotics", "https://robotics.example/acme"],
+    ["Arc", "https://search.example/arc"],
+  ])("does not match %s on letters that are not whole words of the name: %s", (company, url) => {
+    expect(classifyLinks([url], company).domain).toBeUndefined();
+  });
+
+  it.each([
+    ["Bit", "https://bit.ly/3xYz"],
+    ["Goo", "https://goo.gl/abc"],
+    ["Tinyurl", "https://tinyurl.com/abc"],
+    ["T", "https://t.co/abc"],
+    ["Lnkd", "https://lnkd.in/abc"],
+    ["Forms", "https://forms.gle/abc"],
+    ["Typeform", "https://acme.typeform.com/to/abc"],
+    ["Airtable", "https://airtable.com/shrabc"],
+    ["Cal", "https://cal.com/acme/intro"],
+    ["Gem", "https://jobs.gem.com/acme"],
+  ])("never takes a shortener, form or scheduling host, even for %s: %s", (company, url) => {
+    expect(classifyLinks([url], company).domain).toBeUndefined();
+  });
+
+  it("prefers a site named exactly for the company over an earlier lookalike", () => {
+    expect(
+      classifyLinks(["https://archive.org/details/arc", "https://arc.net/careers"], "Arc").domain,
+    ).toBe("arc.net");
+    expect(
+      classifyLinks(["https://cal.com/x", "https://scale.com/careers"], "Scale AI").domain,
+    ).toBe("scale.com");
+  });
+
+  it("lists every linked site that could be the company's, named for it or not", () => {
+    const { domain, sites } = classifyLinks(
+      [
+        "https://www.linkedin.com/company/alphabet",
+        "https://abc.xyz/careers",
+        "https://boards.greenhouse.io/alphabet",
+        "https://www.alphabet.example",
+      ],
+      "Alphabet",
+    );
+    expect(domain).toBe("alphabet.example");
+    expect(sites).toEqual(["abc.xyz", "alphabet.example"]);
   });
 
   it("leaves the domain unset when every link is someone else's site", () => {

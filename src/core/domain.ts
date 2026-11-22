@@ -41,6 +41,15 @@ export function isWithinDomain(domain: string, parent: string): boolean {
 /** Second-level labels that are part of a country suffix, as in .co.uk or .com.au. */
 const SECOND_LEVEL_SUFFIXES = new Set(["co", "com", "org", "net", "ac", "gov", "edu"]);
 
+/** How many trailing labels belong to the registry: two in acme.co.uk, one in acme.com. */
+function suffixLength(labels: readonly string[]): number {
+  return labels.length >= 3 &&
+    (labels.at(-1)?.length ?? 0) === 2 &&
+    SECOND_LEVEL_SUFFIXES.has(labels.at(-2) ?? "")
+    ? 2
+    : 1;
+}
+
 /**
  * The one label of a domain its owner chose: "acme" for acme.com, for
  * jobs.acme.co.uk and for acme.com.au. Everything to its left is a page of the
@@ -48,12 +57,12 @@ const SECOND_LEVEL_SUFFIXES = new Set(["co", "com", "org", "net", "ac", "gov", "
  */
 export function registrableLabel(domain: string): string | undefined {
   const labels = domain.split(".");
-  const suffixLength =
-    labels.length >= 3 &&
-    (labels.at(-1)?.length ?? 0) === 2 &&
-    SECOND_LEVEL_SUFFIXES.has(labels.at(-2) ?? "")
-      ? 2
-      : 1;
-  const label = labels.at(-(suffixLength + 1));
+  const label = labels.at(-(suffixLength(labels) + 1));
   return label === undefined || label === "" ? undefined : label;
+}
+
+/** The domain a company registered, with any subdomain dropped: acme.co.uk for jobs.acme.co.uk. */
+export function registrableDomain(domain: string): string {
+  const labels = domain.split(".");
+  return labels.slice(-(suffixLength(labels) + 1)).join(".");
 }

@@ -200,13 +200,14 @@ describe("HttpClient", () => {
     expect(stub.calls).toHaveLength(1);
   });
 
-  it("remembers a 404 for as long as the ttl, and still reports it as a 404", async () => {
+  it("remembers a 404 for as long as the ttl when asked to, and still reports a 404", async () => {
     const clock = new FakeClock(1_000_000);
     const { stub, client } = setup({ clock, cache: new MemoryCache(clock) });
     stub.on(URL_A, [{ status: 404 }, { body: "it exists now" }]);
+    const lookup = { cacheTtlMs: 60_000, cacheNotFound: true };
 
     for (let ask = 0; ask < 2; ask += 1) {
-      const result = await client.getText(URL_A, { cacheTtlMs: 60_000 });
+      const result = await client.getText(URL_A, lookup);
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.kind).toBe("status");
@@ -215,18 +216,29 @@ describe("HttpClient", () => {
     expect(stub.calls).toHaveLength(1);
 
     clock.advance(60_001);
+    expect(await client.getText(URL_A, lookup)).toEqual({ ok: true, value: "it exists now" });
+  });
+
+  it("does not remember a 404 for a request that only gave a ttl", async () => {
+    const clock = new FakeClock(1_000_000);
+    const { stub, client } = setup({ clock, cache: new MemoryCache(clock) });
+    stub.on(URL_A, [{ status: 404 }, { body: "back up" }]);
+    await client.getText(URL_A, { cacheTtlMs: 60_000 });
     expect(await client.getText(URL_A, { cacheTtlMs: 60_000 })).toEqual({
       ok: true,
-      value: "it exists now",
+      value: "back up",
     });
   });
 
-  it("does not remember a 404 unless a ttl is given", async () => {
+  it("does not remember a 404 without a ttl, even when asked to", async () => {
     const clock = new FakeClock(1_000_000);
     const { stub, client } = setup({ clock, cache: new MemoryCache(clock) });
     stub.on(URL_A, [{ status: 404 }, { body: "it exists now" }]);
-    await client.getText(URL_A);
-    expect(await client.getText(URL_A)).toEqual({ ok: true, value: "it exists now" });
+    await client.getText(URL_A, { cacheNotFound: true });
+    expect(await client.getText(URL_A, { cacheNotFound: true })).toEqual({
+      ok: true,
+      value: "it exists now",
+    });
   });
 
   it("returns the response when the cache cannot be written", async () => {

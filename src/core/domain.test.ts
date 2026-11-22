@@ -3,6 +3,7 @@ import {
   isWithinDomain,
   normalizeCompanyName,
   normalizeDomain,
+  registrableDomain,
   registrableLabel,
 } from "./domain.js";
 
@@ -61,5 +62,18 @@ describe("registrableLabel", () => {
 
   it("has nothing to read in a bare label", () => {
     expect(registrableLabel("localhost")).toBeUndefined();
+  });
+});
+
+describe("registrableDomain", () => {
+  it.each([
+    ["acme.com", "acme.com"],
+    ["careers.acme.com", "acme.com"],
+    ["a.b.acme.com", "acme.com"],
+    ["jobs.acme.co.uk", "acme.co.uk"],
+    ["acme.com.au", "acme.com.au"],
+    ["app.box.io", "box.io"],
+  ])("reads %s as %s", (domain, expected) => {
+    expect(registrableDomain(domain)).toBe(expected);
   });
 });

@@ -1,4 +1,4 @@
-import { isWithinDomain, normalizeCompanyName } from "../core/domain.js";
+import { normalizeCompanyName, registrableDomain } from "../core/domain.js";
 import type { CompanyCandidate, CompanySlugs, Signal } from "../sources/types.js";
 
 /**
@@ -47,9 +47,9 @@ interface Draft {
  *
  * Two candidates are the same company when their domains are equal, or when
  * their normalized names are equal and their domains do not disagree: one of
- * them has none, or one sits under the other, as careers.acme.com does under
- * acme.com. Two unrelated domains under one name stay separate: there really
- * are two companies called Mercury.
+ * them has none, or both sit under one registered domain, as jobs.acme.com
+ * and careers.acme.com do. Two unrelated domains under one name stay separate:
+ * there really are two companies called Mercury.
  */
 export function mergeCandidates(candidates: readonly SourcedCandidate[]): Prospect[] {
   const drafts: Draft[] = [];
@@ -84,11 +84,8 @@ export function mergeCandidates(candidates: readonly SourcedCandidate[]): Prospe
     }
 
     if (candidate.domain !== undefined) {
-      // The parent is the company's address whichever source spoke first, so
-      // the prospect's id does not depend on the order candidates arrive in.
-      if (draft.domain === undefined || isWithinDomain(draft.domain, candidate.domain)) {
-        draft.domain = candidate.domain;
-      }
+      draft.domain =
+        draft.domain === undefined ? candidate.domain : frontDoor(draft.domain, candidate.domain);
       byDomain.set(candidate.domain, draft);
     }
 
@@ -99,7 +96,17 @@ export function mergeCandidates(candidates: readonly SourcedCandidate[]): Prospe
 }
 
 function sameSite(a: string | undefined, b: string | undefined): boolean {
-  return a === undefined || b === undefined || isWithinDomain(a, b) || isWithinDomain(b, a);
+  return a === undefined || b === undefined || registrableDomain(a) === registrableDomain(b);
+}
+
+/**
+ * Which of two addresses of one company the prospect keeps. The shorter one,
+ * so a parent always wins over its subdomains, with the alphabet settling a
+ * tie. Picking by a fixed rule and not by who spoke first keeps the prospect's
+ * id the same whatever order candidates arrive in.
+ */
+function frontDoor(a: string, b: string): string {
+  return a.length < b.length || (a.length === b.length && a < b) ? a : b;
 }
 
 function absorb(draft: Draft, source: string, candidate: CompanyCandidate, seeded: boolean): void {

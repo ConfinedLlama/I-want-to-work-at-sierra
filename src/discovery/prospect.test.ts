@@ -92,6 +92,41 @@ describe("mergeCandidates", () => {
     expect(prospects.map((prospect) => prospect.id)).toEqual(["acme.com"]);
   });
 
+  it.each([
+    { order: ["jobs.acme.com", "careers.acme.com", "acme.com"] },
+    { order: ["jobs.acme.com", "acme.com", "careers.acme.com"] },
+    { order: ["careers.acme.com", "jobs.acme.com", "acme.com"] },
+    { order: ["careers.acme.com", "acme.com", "jobs.acme.com"] },
+    { order: ["acme.com", "jobs.acme.com", "careers.acme.com"] },
+    { order: ["acme.com", "careers.acme.com", "jobs.acme.com"] },
+  ])("merges one name across sibling subdomains, arriving as $order", ({ order }) => {
+    const prospects = mergeCandidates(
+      order.map((domain) => from("hackernews", { name: "Acme", domain })),
+    );
+    expect(prospects.map((prospect) => prospect.id)).toEqual(["acme.com"]);
+  });
+
+  it("gives sibling subdomains with no parent in sight one id, whichever comes first", () => {
+    const ids = (domains: string[]) =>
+      mergeCandidates(domains.map((domain) => from("hackernews", { name: "Acme", domain }))).map(
+        (prospect) => prospect.id,
+      );
+    const forward = ids(["jobs.acme.com", "careers.acme.com"]);
+    expect(forward).toHaveLength(1);
+    expect(ids(["careers.acme.com", "jobs.acme.com"])).toEqual(forward);
+  });
+
+  it("does not take a shared country suffix for a shared domain", () => {
+    const prospects = mergeCandidates([
+      from("yc", { name: "Mercury", domain: "mercury.co.uk" }),
+      from("hackernews", { name: "Mercury", domain: "mercurybank.co.uk" }),
+    ]);
+    expect(prospects.map((prospect) => prospect.id)).toEqual([
+      "mercury.co.uk",
+      "mercurybank.co.uk",
+    ]);
+  });
+
   it("keeps a subdomain apart when the names differ", () => {
     const prospects = mergeCandidates([
       from("yc", { name: "Storefront", domain: "storefront.com" }),

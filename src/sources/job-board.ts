@@ -62,6 +62,7 @@ export function jobBoardSource<S extends z.ZodType>(
       for (const slug of slugCandidates(company, definition.platform)) {
         const response = await context.http.getJson(definition.apiUrl(slug), definition.schema, {
           cacheTtlMs: SIX_HOURS_MS,
+          cacheNotFound: true,
         });
 
         if (!response.ok) {

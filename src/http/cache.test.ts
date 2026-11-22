@@ -70,6 +70,25 @@ describe("response caches", () => {
     expect(await cache.get("k", 1_000)).toBeUndefined();
   });
 
+  it("drops a write it cannot make instead of failing", async () => {
+    await writeFile(join(dir, "taken"), "a file where the cache directory should go");
+    const cache = new DiskCache(join(dir, "taken", "cache"), clock);
+    await expect(
+      cache.set("k", { status: 200, body: "hello", fetchedAt: clock.now() }),
+    ).resolves.toBeUndefined();
+    expect(await cache.get("k", 1_000)).toBeUndefined();
+  });
+
+  it("keeps overlapping writes of one key whole", async () => {
+    const cache = new DiskCache(dir, clock);
+    const bodies = Array.from({ length: 20 }, (_, index) => "x".repeat(1 + index * 500));
+    await Promise.all(
+      bodies.map((body) => cache.set("k", { status: 200, body, fetchedAt: clock.now() })),
+    );
+    expect(bodies).toContain((await cache.get("k", 1_000))?.body);
+    expect(await readdir(dir)).toHaveLength(1);
+  });
+
   it("leaves no temp files behind", async () => {
     const cache = new DiskCache(dir, clock);
     await cache.set("k", { status: 200, body: "hello", fetchedAt: clock.now() });

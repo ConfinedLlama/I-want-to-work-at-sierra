@@ -122,7 +122,8 @@ A pipeline that contacts people needs rules that are not optional.
 
 - Only public data, fetched through documented endpoints, inside their rate limits.
 - Every claim in a dossier keeps a link to where it came from.
-- Nothing is sent and no call is placed unless a run is explicitly started in live mode. Dry run is the default.
+- Nothing is sent and no call is placed unless a run is explicitly started in live mode.
+  Dry run is the default.
 - Opt-outs and do-not-contact lists are checked before every step, not just the first one.
 
 ## Development

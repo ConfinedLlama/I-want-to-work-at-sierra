@@ -1,6 +1,6 @@
 import { mapConcurrent } from "../core/pool.js";
+import { isExcluded } from "../icp/exclusions.js";
 import type { Icp } from "../icp/schema.js";
-import { isExcluded } from "../sources/exclusions.js";
 import type { SourceRegistry } from "../sources/registry.js";
 import type { CompanyCandidate, CompanySlugs, SourceContext } from "../sources/types.js";
 import { mergeCandidates, withSignals, type Prospect, type SourcedCandidate } from "./prospect.js";

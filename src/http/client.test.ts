@@ -1,7 +1,10 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { FakeClock } from "../core/clock.js";
-import { MemoryCache } from "./cache.js";
+import { DiskCache, MemoryCache } from "./cache.js";
 import { HttpClient, parseRetryAfter, type HttpClientOptions } from "./client.js";
 import { HostRateLimiter } from "./rate-limit.js";
 import { StubFetch } from "./testing.js";
@@ -113,10 +116,22 @@ describe("HttpClient", () => {
     expect(clock.sleeps).toEqual([7_000]);
   });
 
-  it("caps an unreasonable Retry-After", async () => {
+  it("gives up at once when Retry-After is longer than it will wait", async () => {
     const { stub, clock, client } = setup({ maxDelayMs: 2_000 });
     stub.on(URL_A, [{ status: 429, headers: { "retry-after": "3600" } }, { body: "ok" }]);
-    await client.getText(URL_A);
+    const result = await client.getText(URL_A);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.status).toBe(429);
+    // Asking again any sooner than an hour from now is what the server ruled out.
+    expect(stub.calls).toHaveLength(1);
+    expect(clock.sleeps).toEqual([]);
+  });
+
+  it("still waits out a Retry-After that is exactly as long as it will wait", async () => {
+    const { stub, clock, client } = setup({ maxDelayMs: 2_000 });
+    stub.on(URL_A, [{ status: 503, headers: { "retry-after": "2" } }, { body: "ok" }]);
+    expect(await client.getText(URL_A)).toEqual({ ok: true, value: "ok" });
     expect(clock.sleeps).toEqual([2_000]);
   });
 
@@ -157,7 +172,81 @@ describe("HttpClient", () => {
     expect(await client.getText(URL_A)).toEqual({ ok: true, value: "second" });
   });
 
-  it("never caches a failure", async () => {
+  it.each([
+    ["is not json", "<html>Sign in to the wifi</html>"],
+    ["has the wrong shape", { message: "try again later" }],
+  ])("does not cache a 200 whose body %s", async (_what, body) => {
+    const clock = new FakeClock(1_000_000);
+    const { stub, client } = setup({ clock, cache: new MemoryCache(clock) });
+    stub.on(URL_A, [{ body }, { body: { id: 7 } }]);
+
+    expect((await client.getJson(URL_A, Thing, { cacheTtlMs: 60_000 })).ok).toBe(false);
+    expect(await client.getJson(URL_A, Thing, { cacheTtlMs: 60_000 })).toEqual({
+      ok: true,
+      value: { id: 7 },
+    });
+  });
+
+  it("replaces a cached body that does not read, instead of serving it", async () => {
+    const clock = new FakeClock(1_000_000);
+    const cache = new MemoryCache(clock);
+    await cache.set(URL_A, { status: 200, body: "<html>blocked</html>", fetchedAt: clock.now() });
+    const { stub, client } = setup({ clock, cache });
+    stub.on(URL_A, { body: { id: 7 } });
+
+    const expected = { ok: true, value: { id: 7 } };
+    expect(await client.getJson(URL_A, Thing, { cacheTtlMs: 60_000 })).toEqual(expected);
+    expect(await client.getJson(URL_A, Thing, { cacheTtlMs: 60_000 })).toEqual(expected);
+    expect(stub.calls).toHaveLength(1);
+  });
+
+  it("remembers a 404 for as long as the ttl, and still reports it as a 404", async () => {
+    const clock = new FakeClock(1_000_000);
+    const { stub, client } = setup({ clock, cache: new MemoryCache(clock) });
+    stub.on(URL_A, [{ status: 404 }, { body: "it exists now" }]);
+
+    for (let ask = 0; ask < 2; ask += 1) {
+      const result = await client.getText(URL_A, { cacheTtlMs: 60_000 });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.kind).toBe("status");
+      expect(result.error.status).toBe(404);
+    }
+    expect(stub.calls).toHaveLength(1);
+
+    clock.advance(60_001);
+    expect(await client.getText(URL_A, { cacheTtlMs: 60_000 })).toEqual({
+      ok: true,
+      value: "it exists now",
+    });
+  });
+
+  it("does not remember a 404 unless a ttl is given", async () => {
+    const clock = new FakeClock(1_000_000);
+    const { stub, client } = setup({ clock, cache: new MemoryCache(clock) });
+    stub.on(URL_A, [{ status: 404 }, { body: "it exists now" }]);
+    await client.getText(URL_A);
+    expect(await client.getText(URL_A)).toEqual({ ok: true, value: "it exists now" });
+  });
+
+  it("returns the response when the cache cannot be written", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "http-client-"));
+    try {
+      await writeFile(join(dir, "taken"), "a file where the cache directory should go");
+      const clock = new FakeClock(1_000_000);
+      const cache = new DiskCache(join(dir, "taken", "cache"), clock);
+      const { stub, client } = setup({ clock, cache });
+      stub.on(URL_A, { body: "fetched" });
+      expect(await client.getText(URL_A, { cacheTtlMs: 60_000 })).toEqual({
+        ok: true,
+        value: "fetched",
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not cache a server error", async () => {
     const clock = new FakeClock(1_000_000);
     const { stub, client } = setup({ clock, cache: new MemoryCache(clock), maxRetries: 0 });
     stub.on(URL_A, [{ status: 500 }, { body: "recovered" }]);

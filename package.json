@@ -9,7 +9,7 @@
   },
   "packageManager": "pnpm@9.15.4",
   "bin": {
-    "outbound": "./dist/cli/main.js"
+    "outbound": "./dist/cli/bin.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -20,7 +20,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
-    "outbound": "tsx src/cli/main.ts"
+    "outbound": "tsx src/cli/bin.ts"
   },
   "dependencies": {
     "commander": "^15.1.0",

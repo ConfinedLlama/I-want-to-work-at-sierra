@@ -97,6 +97,26 @@ describe("cli", () => {
     expect(report.stats.kept).toBe(1);
   });
 
+  it("prints the report and then explains an --out path it cannot write", async () => {
+    await writeFile(join(dir, "taken"), "a file where the directory should go");
+    const code = await run(
+      ["discover", "icp.json", "--only", "yc", "--out", "taken/report.json", "--quiet"],
+      io,
+    );
+    expect(code).toBe(1);
+    expect(out).toContain("1. Helpline (helpline.example)  [yc]");
+    expect(errOut).toContain(`Could not write ${join(dir, "taken", "report.json")}`);
+  });
+
+  it("lists a seeded prospect with the seed marked once", async () => {
+    await writeFile(
+      join(dir, "seeded.json"),
+      JSON.stringify(minimalIcp({ seeds: [{ name: "Named", domain: "named.com" }] })),
+    );
+    expect(await run(["discover", "seeded.json", "--only", "yc", "--quiet"], io)).toBe(0);
+    expect(out).toContain("1. Named (named.com)  [seed]\n");
+  });
+
   it("reports source failures without failing the command", async () => {
     // The default route answers 200, so this needs a context of its own.
     const failing = testContext();

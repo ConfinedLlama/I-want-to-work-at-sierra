@@ -1,3 +1,4 @@
+import { err, ok, type Result } from "../core/result.js";
 import { ashbySource } from "./ashby.js";
 import { createGithubSource } from "./github.js";
 import { greenhouseSource } from "./greenhouse.js";
@@ -30,7 +31,9 @@ export class UnknownSourceError extends Error {
 }
 
 /** Every source the pipeline knows about, wired with whatever the environment offers. */
-export function createRegistry(options: RegistryOptions = {}): SourceRegistry {
+export function createRegistry(
+  options: RegistryOptions = {},
+): Result<SourceRegistry, UnknownSourceError> {
   const env = options.env ?? {};
   const all: SourceRegistry = {
     discovery: [ycSource, hackerNewsSource],
@@ -41,19 +44,19 @@ export function createRegistry(options: RegistryOptions = {}): SourceRegistry {
       createGithubSource({ token: env.GITHUB_TOKEN }),
     ],
   };
-  if (options.only === undefined) return all;
+  if (options.only === undefined) return ok(all);
 
   const wanted = new Set(
     options.only.map((id) => id.trim().toLowerCase()).filter((id) => id !== ""),
   );
   const known = listSources(all).map((source) => source.id);
   const unknown = [...wanted].filter((id) => !known.includes(id));
-  if (unknown.length > 0) throw new UnknownSourceError(unknown, known);
+  if (unknown.length > 0) return err(new UnknownSourceError(unknown, known));
 
-  return {
+  return ok({
     discovery: all.discovery.filter((source) => wanted.has(source.info.id)),
     enrichment: all.enrichment.filter((source) => wanted.has(source.info.id)),
-  };
+  });
 }
 
 export function listSources(registry: SourceRegistry): (SourceInfo & { role: string })[] {

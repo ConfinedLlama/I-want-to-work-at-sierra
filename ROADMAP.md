@@ -15,10 +15,13 @@ Each milestone should leave the pipeline runnable end to end up to that stage, w
 
 Known gaps, found by running it against live data:
 
-- [ ] A guessed job board slug is not verified. `acme` on Greenhouse could be a different Acme. GitHub already checks the org's website against the domain, and the boards need an equivalent.
+- [ ] A guessed job board slug is not verified.
+  `acme` on Greenhouse could be a different Acme.
+  GitHub already checks the org's website against the domain, and the boards need an equivalent.
 - [ ] Hacker News posts carry no structured location, so the ICP's regions are not applied to them.
 - [ ] Ties in the pre-enrichment ranking fall back to alphabetical order, which decides who makes the cut when `--max` is small.
-- [ ] Without a token GitHub allows about 30 companies an hour. The report should say when enrichment stopped early for that reason.
+- [ ] Without a token GitHub allows about 30 companies an hour.
+  The report should say when enrichment stopped early for that reason.
 
 ## 2. Research
 

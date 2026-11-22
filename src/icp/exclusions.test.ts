@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseIcp } from "../icp/load.js";
-import { minimalIcp } from "../icp/testing.js";
 import { unwrap } from "../core/result.js";
 import { isExcluded } from "./exclusions.js";
+import { parseIcp } from "./load.js";
+import { minimalIcp } from "./testing.js";
 
 const icp = unwrap(
   parseIcp(

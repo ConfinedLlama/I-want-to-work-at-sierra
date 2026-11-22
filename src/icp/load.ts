@@ -4,6 +4,7 @@ import { parse as parseYaml } from "yaml";
 import type { z } from "zod";
 import { normalizeCompanyName, normalizeDomain } from "../core/domain.js";
 import { err, ok, type Result } from "../core/result.js";
+import { isExcluded } from "./exclusions.js";
 import { IcpSchema, type Icp } from "./schema.js";
 
 export class IcpError extends Error {
@@ -123,13 +124,11 @@ function crossFieldProblems(icp: Icp): string[] {
     }
   });
 
-  const excluded = new Set(icp.exclusions.domains);
   icp.seeds.forEach((seed, index) => {
-    if (seed.domain === undefined) return;
-    if (normalizeDomain(seed.domain) === undefined) {
+    if (seed.domain !== undefined && normalizeDomain(seed.domain) === undefined) {
       problems.push(`seeds[${index}].domain: "${seed.domain}" is not a domain`);
-    } else if (excluded.has(seed.domain)) {
-      problems.push(`seeds[${index}].domain: "${seed.domain}" is also in exclusions.domains`);
+    } else if (isExcluded(icp, seed)) {
+      problems.push(`seeds[${index}]: "${seed.name}" is also ruled out by exclusions`);
     }
   });
 

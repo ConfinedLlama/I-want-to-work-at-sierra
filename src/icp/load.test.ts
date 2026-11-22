@@ -72,7 +72,35 @@ describe("parseIcp", () => {
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.problems[0]).toContain("also in exclusions.domains");
+    expect(result.error.problems).toEqual(['seeds[0]: "Acme" is also ruled out by exclusions']);
+  });
+
+  it("flags a seed on a subdomain of an excluded domain", () => {
+    const result = parseIcp(
+      minimalIcp({
+        exclusions: { domains: ["acme.com"] },
+        seeds: [{ name: "Acme Careers", domain: "careers.acme.com" }],
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.problems).toEqual([
+      'seeds[0]: "Acme Careers" is also ruled out by exclusions',
+    ]);
+  });
+
+  it("flags a seed whose name is excluded, however it is punctuated", () => {
+    const result = parseIcp(
+      minimalIcp({
+        exclusions: { companies: ["Acme"] },
+        seeds: [{ name: "Fine" }, { name: "Acme, Inc." }],
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.problems).toEqual([
+      'seeds[1]: "Acme, Inc." is also ruled out by exclusions',
+    ]);
   });
 
   it("flags domains that are not domains", () => {

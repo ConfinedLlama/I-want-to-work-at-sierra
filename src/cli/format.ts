@@ -52,10 +52,7 @@ export function formatReport(report: DiscoveryReport): string {
 function formatProspect(prospect: Prospect, rank: number): string[] {
   const where = prospect.domain === undefined ? "" : ` (${prospect.domain})`;
   const size = prospect.employees === undefined ? "" : `, ~${prospect.employees} people`;
-  const seeded = prospect.seeded ? ", seed" : "";
-  const lines = [
-    `${rank}. ${prospect.name}${where}  [${prospect.sources.join(", ")}${size}${seeded}]`,
-  ];
+  const lines = [`${rank}. ${prospect.name}${where}  [${prospect.sources.join(", ")}${size}]`];
   for (const signal of prospect.signals) {
     const matched =
       signal.matched === undefined || signal.matched.length === 0

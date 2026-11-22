@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { normalizeDomain } from "../core/domain.js";
 import { err, ok, type Result } from "../core/result.js";
+import { isExcluded } from "../icp/exclusions.js";
 import type { Icp } from "../icp/schema.js";
 import { matchTerms } from "../text/match.js";
-import { isExcluded } from "./exclusions.js";
 import {
   SourceError,
   type CompanyCandidate,

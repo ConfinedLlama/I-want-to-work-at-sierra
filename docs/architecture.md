@@ -26,7 +26,7 @@ loadIcp ──► registry.discovery[] ──► mergeCandidates ──► rank 
 | `src/core`      | `Result`, the injectable clock, domain and name normalization, the concurrency helper |
 | `src/text`      | Term matching on word boundaries, HTML to text, truncation                            |
 | `src/http`      | The only network client: timeout, retry, rate limit, cache                            |
-| `src/icp`       | The profile schema and loader                                                         |
+| `src/icp`       | The profile schema, the loader and the exclusion rule                                 |
 | `src/sources`   | One file per source, the shared job board logic, the registry                         |
 | `src/discovery` | Merging, ranking and the orchestrator                                                 |
 | `src/cli`       | Argument parsing, runtime wiring, output formatting                                   |

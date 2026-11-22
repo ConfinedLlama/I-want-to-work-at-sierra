@@ -126,6 +126,13 @@ describe("githubSource", () => {
     ).toHaveLength(2);
   });
 
+  it("spends no request on a guess it has no domain to check against", async () => {
+    const { stub, context } = testContext();
+    stub.on("https://api.github.com/", { body: org });
+    expect(unwrap(await createGithubSource().enrich({ name: "Acme" }, icp, context))).toEqual([]);
+    expect(stub.calls).toEqual([]);
+  });
+
   it("trusts an explicit slug without checking the website", async () => {
     const { stub, context } = testContext();
     stub.on("https://api.github.com/orgs/acme-labs", {

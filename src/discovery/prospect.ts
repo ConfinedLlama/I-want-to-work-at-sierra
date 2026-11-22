@@ -1,4 +1,4 @@
-import { normalizeCompanyName } from "../core/domain.js";
+import { isWithinDomain, normalizeCompanyName } from "../core/domain.js";
 import type { CompanyCandidate, CompanySlugs, Signal } from "../sources/types.js";
 
 /**
@@ -46,9 +46,10 @@ interface Draft {
  * Merge candidates from every source into one prospect per company.
  *
  * Two candidates are the same company when their domains are equal, or when
- * their normalized names are equal and at most one of them has a domain. Two
- * different domains under one name stay separate: there really are two
- * companies called Mercury.
+ * their normalized names are equal and their domains do not disagree: one of
+ * them has none, or one sits under the other, as careers.acme.com does under
+ * acme.com. Two unrelated domains under one name stay separate: there really
+ * are two companies called Mercury.
  */
 export function mergeCandidates(candidates: readonly SourcedCandidate[]): Prospect[] {
   const drafts: Draft[] = [];
@@ -61,9 +62,7 @@ export function mergeCandidates(candidates: readonly SourcedCandidate[]): Prospe
 
     let draft = candidate.domain === undefined ? undefined : byDomain.get(candidate.domain);
     if (draft === undefined && nameKey !== "") {
-      draft = (byName.get(nameKey) ?? []).find(
-        (other) => other.domain === undefined || candidate.domain === undefined,
-      );
+      draft = (byName.get(nameKey) ?? []).find((other) => sameSite(other.domain, candidate.domain));
     }
 
     if (draft === undefined) {
@@ -84,15 +83,23 @@ export function mergeCandidates(candidates: readonly SourcedCandidate[]): Prospe
       if (nameKey !== "") byName.set(nameKey, [...(byName.get(nameKey) ?? []), draft]);
     }
 
-    if (draft.domain === undefined && candidate.domain !== undefined) {
-      draft.domain = candidate.domain;
+    if (candidate.domain !== undefined) {
+      // The parent is the company's address whichever source spoke first, so
+      // the prospect's id does not depend on the order candidates arrive in.
+      if (draft.domain === undefined || isWithinDomain(draft.domain, candidate.domain)) {
+        draft.domain = candidate.domain;
+      }
+      byDomain.set(candidate.domain, draft);
     }
-    if (draft.domain !== undefined) byDomain.set(draft.domain, draft);
 
     absorb(draft, source, candidate, seeded === true);
   }
 
   return drafts.map(finish);
+}
+
+function sameSite(a: string | undefined, b: string | undefined): boolean {
+  return a === undefined || b === undefined || isWithinDomain(a, b) || isWithinDomain(b, a);
 }
 
 function absorb(draft: Draft, source: string, candidate: CompanyCandidate, seeded: boolean): void {

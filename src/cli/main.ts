@@ -1,11 +1,9 @@
-#!/usr/bin/env node
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Command, CommanderError, InvalidArgumentError } from "commander";
 import { discover, type DiscoveryEvent } from "../discovery/discover.js";
 import { loadIcp } from "../icp/load.js";
-import { createRegistry, listSources, UnknownSourceError } from "../sources/registry.js";
+import { createRegistry, listSources } from "../sources/registry.js";
 import type { SourceContext } from "../sources/types.js";
 import { count, formatReport, formatSources } from "./format.js";
 import { createRuntime } from "./runtime.js";
@@ -51,7 +49,9 @@ export async function run(argv: readonly string[], io: CliIo): Promise<number> {
     .command("sources")
     .description("List the data sources and how each one may be used")
     .action(() => {
-      io.stdout(`${formatSources(listSources(createRegistry({ env: io.env })))}\n`);
+      const registry = createRegistry({ env: io.env });
+      if (!registry.ok) throw new UsageError(registry.error.message);
+      io.stdout(`${formatSources(listSources(registry.value))}\n`);
     });
 
   program
@@ -80,17 +80,12 @@ export async function run(argv: readonly string[], io: CliIo): Promise<number> {
         const loaded = await loadIcp(resolve(io.cwd, file));
         if (!loaded.ok) throw new UsageError(loaded.error.message);
 
-        let registry;
-        try {
-          registry = createRegistry({ env: io.env, only: options.only });
-        } catch (cause) {
-          if (cause instanceof UnknownSourceError) throw new UsageError(cause.message);
-          throw cause;
-        }
+        const registry = createRegistry({ env: io.env, only: options.only });
+        if (!registry.ok) throw new UsageError(registry.error.message);
 
         const context =
           io.runtime ?? createRuntime({ cwd: io.cwd, env: io.env, cache: options.cache });
-        const report = await discover(loaded.value, registry, context, {
+        const report = await discover(loaded.value, registry.value, context, {
           maxProspects: options.max,
           ...(options.quiet
             ? {}
@@ -101,13 +96,21 @@ export async function run(argv: readonly string[], io: CliIo): Promise<number> {
               }),
         });
 
+        // Printed before the file is written: the run is paid for by then, and
+        // a bad --out path should not be the reason its result is never seen.
+        io.stdout(`${options.json ? JSON.stringify(report, null, 2) : formatReport(report)}\n`);
+
         if (options.out !== undefined) {
           const path = resolve(io.cwd, options.out);
-          await mkdir(dirname(path), { recursive: true });
-          await writeFile(path, `${JSON.stringify(report, null, 2)}\n`);
+          try {
+            await mkdir(dirname(path), { recursive: true });
+            await writeFile(path, `${JSON.stringify(report, null, 2)}\n`);
+          } catch (cause) {
+            const reason = cause instanceof Error ? cause.message : String(cause);
+            throw new UsageError(`Could not write ${path}: ${reason}`);
+          }
           if (!options.quiet) io.stderr(`wrote ${path}\n`);
         }
-        io.stdout(`${options.json ? JSON.stringify(report, null, 2) : formatReport(report)}\n`);
       },
     );
 
@@ -147,24 +150,4 @@ function progressLine(event: DiscoveryEvent): string {
     case "enriched":
       return `  ${event.prospect}: ${count(event.signals, "signal")}`;
   }
-}
-
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
-  run(process.argv.slice(2), {
-    stdout: (text) => process.stdout.write(text),
-    stderr: (text) => process.stderr.write(text),
-    env: process.env,
-    cwd: process.cwd(),
-  }).then(
-    (code) => {
-      process.exitCode = code;
-    },
-    (cause: unknown) => {
-      console.error(cause);
-      process.exitCode = 70;
-    },
-  );
 }

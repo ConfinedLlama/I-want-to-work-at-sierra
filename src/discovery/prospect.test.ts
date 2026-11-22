@@ -71,6 +71,38 @@ describe("mergeCandidates", () => {
     expect(prospects[0]?.sources).toEqual(["hackernews", "yc", "other"]);
   });
 
+  it.each([
+    { order: "the parent comes first", first: "acme.com", second: "careers.acme.com" },
+    { order: "the subdomain comes first", first: "careers.acme.com", second: "acme.com" },
+  ])("merges a subdomain into its parent under one name when $order", ({ first, second }) => {
+    const prospects = mergeCandidates([
+      from("yc", { name: "Acme", domain: first }),
+      from("hackernews", { name: "Acme, Inc.", domain: second }),
+    ]);
+    expect(prospects.map((prospect) => prospect.id)).toEqual(["acme.com"]);
+    expect(prospects[0]?.sources).toEqual(["yc", "hackernews"]);
+  });
+
+  it("finds a merged subdomain again under any name", () => {
+    const prospects = mergeCandidates([
+      from("yc", { name: "Acme", domain: "acme.com" }),
+      from("hackernews", { name: "Acme", domain: "careers.acme.com" }),
+      from("other", { name: "Acme Talent Team", domain: "careers.acme.com" }),
+    ]);
+    expect(prospects.map((prospect) => prospect.id)).toEqual(["acme.com"]);
+  });
+
+  it("keeps a subdomain apart when the names differ", () => {
+    const prospects = mergeCandidates([
+      from("yc", { name: "Storefront", domain: "storefront.com" }),
+      from("hackernews", { name: "Tiny Shop", domain: "tinyshop.storefront.com" }),
+    ]);
+    expect(prospects.map((prospect) => prospect.id)).toEqual([
+      "storefront.com",
+      "tinyshop.storefront.com",
+    ]);
+  });
+
   it("keeps two companies with the same name and different domains apart", () => {
     const prospects = mergeCandidates([
       from("yc", { name: "Mercury", domain: "mercury.com" }),

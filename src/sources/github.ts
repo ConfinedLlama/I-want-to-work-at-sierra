@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { normalizeDomain } from "../core/domain.js";
+import { isWithinDomain, normalizeDomain } from "../core/domain.js";
 import { err, ok, type Result } from "../core/result.js";
 import type { HttpError } from "../http/client.js";
 import type { Icp } from "../icp/schema.js";
@@ -79,6 +79,9 @@ export function createGithubSource(options: GithubSourceOptions = {}): Enrichmen
       context: SourceContext,
     ): Promise<Result<Signal[], SourceError>> {
       const explicit = company.slugs?.github !== undefined;
+      // A guess is only ever accepted against the company's domain, so without
+      // one there is nothing a request could tell us.
+      if (!explicit && company.domain === undefined) return ok([]);
 
       for (const slug of slugCandidates(company, "github")) {
         const org = await context.http.getJson(`${API}/orgs/${encodeURIComponent(slug)}`, Org, {
@@ -118,9 +121,7 @@ function belongsTo(blog: string | null | undefined, domain: string | undefined):
   if (domain === undefined || blog == null) return false;
   const orgDomain = normalizeDomain(blog);
   if (orgDomain === undefined) return false;
-  return (
-    orgDomain === domain || orgDomain.endsWith(`.${domain}`) || domain.endsWith(`.${orgDomain}`)
-  );
+  return isWithinDomain(orgDomain, domain) || isWithinDomain(domain, orgDomain);
 }
 
 function toSignals(repos: readonly Repo[], orgUrl: string, icp: Icp, nowMs: number): Signal[] {

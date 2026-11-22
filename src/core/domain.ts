@@ -32,3 +32,28 @@ export function normalizeCompanyName(input: string): string {
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
+
+/** Whether `domain` is `parent` or sits under it: jobs.acme.com is within acme.com. */
+export function isWithinDomain(domain: string, parent: string): boolean {
+  return domain === parent || domain.endsWith(`.${parent}`);
+}
+
+/** Second-level labels that are part of a country suffix, as in .co.uk or .com.au. */
+const SECOND_LEVEL_SUFFIXES = new Set(["co", "com", "org", "net", "ac", "gov", "edu"]);
+
+/**
+ * The one label of a domain its owner chose: "acme" for acme.com, for
+ * jobs.acme.co.uk and for acme.com.au. Everything to its left is a page of the
+ * same site and everything to its right belongs to the registry.
+ */
+export function registrableLabel(domain: string): string | undefined {
+  const labels = domain.split(".");
+  const suffixLength =
+    labels.length >= 3 &&
+    (labels.at(-1)?.length ?? 0) === 2 &&
+    SECOND_LEVEL_SUFFIXES.has(labels.at(-2) ?? "")
+      ? 2
+      : 1;
+  const label = labels.at(-(suffixLength + 1));
+  return label === undefined || label === "" ? undefined : label;
+}

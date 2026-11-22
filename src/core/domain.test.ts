@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCompanyName, normalizeDomain } from "./domain.js";
+import {
+  isWithinDomain,
+  normalizeCompanyName,
+  normalizeDomain,
+  registrableLabel,
+} from "./domain.js";
 
 describe("normalizeDomain", () => {
   it.each([
@@ -27,5 +32,34 @@ describe("normalizeCompanyName", () => {
   it("does not eat words that merely contain a suffix", () => {
     expect(normalizeCompanyName("Incident.io")).toBe("incident io");
     expect(normalizeCompanyName("Cohere")).toBe("cohere");
+  });
+});
+
+describe("isWithinDomain", () => {
+  it("holds for the domain itself and for anything under it", () => {
+    expect(isWithinDomain("acme.com", "acme.com")).toBe(true);
+    expect(isWithinDomain("jobs.eu.acme.com", "acme.com")).toBe(true);
+  });
+
+  it("does not hold for a parent or for a name that only ends the same way", () => {
+    expect(isWithinDomain("acme.com", "jobs.acme.com")).toBe(false);
+    expect(isWithinDomain("notacme.com", "acme.com")).toBe(false);
+  });
+});
+
+describe("registrableLabel", () => {
+  it.each([
+    ["acme.com", "acme"],
+    ["careers.acme.com", "acme"],
+    ["jobs.acme.co.uk", "acme"],
+    ["acme.com.au", "acme"],
+    ["app.box.io", "box"],
+    ["acme.teamtailor.com", "teamtailor"],
+  ])("reads %s as %s", (domain, expected) => {
+    expect(registrableLabel(domain)).toBe(expected);
+  });
+
+  it("has nothing to read in a bare label", () => {
+    expect(registrableLabel("localhost")).toBeUndefined();
   });
 });

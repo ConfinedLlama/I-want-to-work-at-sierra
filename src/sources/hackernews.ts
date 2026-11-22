@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { normalizeDomain } from "../core/domain.js";
+import { normalizeCompanyName, normalizeDomain, registrableLabel } from "../core/domain.js";
 import { err, ok, type Result } from "../core/result.js";
+import { isExcluded } from "../icp/exclusions.js";
 import type { Icp } from "../icp/schema.js";
 import { extractUrls, htmlToText } from "../text/html.js";
 import { matchTerms } from "../text/match.js";
 import { truncate } from "../text/truncate.js";
-import { isExcluded } from "./exclusions.js";
 import {
   SourceError,
   type CompanyCandidate,
@@ -128,7 +128,7 @@ function toCandidate(
   const matched = matchTerms(text, terms);
   if (matched.length === 0) return undefined;
 
-  const { domain, slugs } = classifyLinks(extractUrls(html));
+  const { domain, slugs } = classifyLinks(extractUrls(html), name);
   const description = rest.join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
   if (isExcluded(icp, { name, domain, description: text })) return undefined;
 
@@ -214,12 +214,36 @@ const BOARD_HOSTS: Readonly<Record<string, keyof CompanySlugs>> = {
   "jobs.ashbyhq.com": "ashby",
 };
 
+/** Fewer shared characters than this prove nothing: "t" and "io" are inside most names. */
+const MIN_NAME_OVERLAP = 3;
+
+/**
+ * Whether a domain reads as the company's own: the label the owner registered
+ * and the company's name have to contain one another, as "usepylon" does for
+ * Pylon and "acme" does for Acme Robotics. Posts also link to forms, link
+ * shorteners, press and career pages hosted by someone else, and a domain is
+ * what companies are merged on, so one of those would fold every company that
+ * links to it into a single prospect.
+ */
+function namedFor(domain: string, company: string): boolean {
+  const label = registrableLabel(domain);
+  if (label === undefined) return false;
+  const name = normalizeCompanyName(company).replace(/ /g, "");
+  const labelIsShorter = label.length < name.length;
+  const shorter = labelIsShorter ? label : name;
+  const longer = labelIsShorter ? name : label;
+  return shorter.length < MIN_NAME_OVERLAP ? shorter === longer : longer.includes(shorter);
+}
+
 /**
  * Sort the links in a post into "this is their site" and "this is their job
  * board". A board link is as useful as a domain: it gives us the exact slug to
  * query later, with no guessing.
  */
-export function classifyLinks(urls: readonly string[]): {
+export function classifyLinks(
+  urls: readonly string[],
+  company: string,
+): {
   domain: string | undefined;
   slugs: CompanySlugs;
 } {
@@ -250,7 +274,8 @@ export function classifyLinks(urls: readonly string[]): {
     }
     if (NOT_A_COMPANY_SITE.some((other) => host === other || host.endsWith(`.${other}`))) continue;
 
-    domain ??= normalizeDomain(host);
+    const site = normalizeDomain(host);
+    if (site !== undefined && namedFor(site, company)) domain ??= site;
   }
   return { domain, slugs };
 }

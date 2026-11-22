@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Clock } from "../core/clock.js";
 
@@ -12,6 +12,7 @@ export interface CachedResponse {
 
 export interface ResponseCache {
   get(key: string, maxAgeMs: number): Promise<CachedResponse | undefined>;
+  /** Best effort. A cache that cannot store a response drops it and never rejects. */
   set(key: string, response: CachedResponse): Promise<void>;
 }
 
@@ -66,12 +67,18 @@ export class DiskCache implements ResponseCache {
   }
 
   async set(key: string, response: CachedResponse): Promise<void> {
-    await mkdir(this.dir, { recursive: true });
     const path = this.pathFor(key);
     // Write then rename so a crash mid-write cannot leave a half file behind.
-    const temp = `${path}.${process.pid}.tmp`;
-    await writeFile(temp, JSON.stringify(response));
-    await rename(temp, path);
+    // Two requests for one URL can overlap, so every write gets a temp file of its own.
+    const temp = `${path}.${randomUUID()}.tmp`;
+    try {
+      await mkdir(this.dir, { recursive: true });
+      await writeFile(temp, JSON.stringify(response));
+      await rename(temp, path);
+    } catch {
+      // A read-only directory or a full disk costs the cache, never the response.
+      await rm(temp, { force: true }).catch(() => undefined);
+    }
   }
 
   private pathFor(key: string): string {

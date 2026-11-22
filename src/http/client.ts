@@ -31,7 +31,10 @@ export interface HttpClientOptions {
   /** Retries after the first attempt. 2 means up to three requests in total. */
   readonly maxRetries?: number;
   readonly baseDelayMs?: number;
-  /** Upper bound on any single wait, including one requested by Retry-After. */
+  /**
+   * The longest wait before a retry. A Retry-After beyond it ends the request
+   * instead of being cut short, because retrying early is what it forbids.
+   */
   readonly maxDelayMs?: number;
   /** Returns a number in [0, 1). Injected so backoff jitter is testable. */
   readonly random?: () => number;
@@ -39,15 +42,15 @@ export interface HttpClientOptions {
 
 export interface RequestOptions {
   readonly headers?: Readonly<Record<string, string>>;
-  /** Serve from cache when a copy newer than this exists. Omit to skip the cache. */
+  /**
+   * Serve from cache when a copy newer than this exists. Omit to skip the cache.
+   * A 404 is remembered for as long, so a slug with nothing behind it is asked
+   * about once and not on every rerun.
+   */
   readonly cacheTtlMs?: number;
 }
 
-interface TextResponse {
-  readonly status: number;
-  readonly body: string;
-  readonly fromCache: boolean;
-}
+const NOT_FOUND = 404;
 
 /**
  * The one way out to the network for every source.
@@ -76,43 +79,47 @@ export class HttpClient {
   }
 
   /** GET a URL and validate the JSON body against a schema. */
-  async getJson<S extends z.ZodType>(
+  getJson<S extends z.ZodType>(
     url: string,
     schema: S,
     options: RequestOptions = {},
   ): Promise<Result<z.output<S>, HttpError>> {
-    const response = await this.getText(url, {
-      ...options,
-      headers: { accept: "application/json", ...options.headers },
-    });
-    if (!response.ok) return response;
+    return this.request(
+      url,
+      { ...options, headers: { accept: "application/json", ...options.headers } },
+      (body): Result<z.output<S>, HttpError> => {
+        let json: unknown;
+        try {
+          json = JSON.parse(body);
+        } catch {
+          return err(new HttpError("parse", url, `Response from ${url} was not valid JSON`));
+        }
 
-    let json: unknown;
-    try {
-      json = JSON.parse(response.value);
-    } catch {
-      return err(new HttpError("parse", url, `Response from ${url} was not valid JSON`));
-    }
-
-    const parsed = schema.safeParse(json);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      const where = first === undefined ? "" : ` at ${first.path.join(".")}: ${first.message}`;
-      return err(new HttpError("shape", url, `Unexpected response shape from ${url}${where}`));
-    }
-    return ok(parsed.data);
+        const parsed = schema.safeParse(json);
+        if (!parsed.success) {
+          const first = parsed.error.issues[0];
+          const where = first === undefined ? "" : ` at ${first.path.join(".")}: ${first.message}`;
+          return err(new HttpError("shape", url, `Unexpected response shape from ${url}${where}`));
+        }
+        return ok(parsed.data);
+      },
+    );
   }
 
-  async getText(url: string, options: RequestOptions = {}): Promise<Result<string, HttpError>> {
-    const response = await this.request(url, options);
-    if (!response.ok) return response;
-    return ok(response.value.body);
+  getText(url: string, options: RequestOptions = {}): Promise<Result<string, HttpError>> {
+    return this.request(url, options, (body): Result<string, HttpError> => ok(body));
   }
 
-  private async request(
+  /**
+   * `read` turns a body into what the caller asked for. It runs before anything
+   * is cached: a 200 that is really a block page or a truncated response must
+   * not be stored and then served to every rerun until it expires.
+   */
+  private async request<T>(
     url: string,
     options: RequestOptions,
-  ): Promise<Result<TextResponse, HttpError>> {
+    read: (body: string) => Result<T, HttpError>,
+  ): Promise<Result<T, HttpError>> {
     let host: string;
     try {
       host = new URL(url).host;
@@ -121,9 +128,20 @@ export class HttpClient {
     }
 
     const { cache } = this.options;
-    if (cache !== undefined && options.cacheTtlMs !== undefined) {
-      const hit = await cache.get(url, options.cacheTtlMs);
-      if (hit !== undefined) return ok({ status: hit.status, body: hit.body, fromCache: true });
+    const { cacheTtlMs } = options;
+    const remember = async (status: number, body: string): Promise<void> => {
+      if (cache === undefined || cacheTtlMs === undefined) return;
+      await cache.set(url, { status, body, fetchedAt: this.clock.now() });
+    };
+
+    if (cache !== undefined && cacheTtlMs !== undefined) {
+      const hit = await cache.get(url, cacheTtlMs);
+      if (hit !== undefined) {
+        if (hit.status >= 400) return err(statusError(url, hit.status));
+        const value = read(hit.body);
+        // A stored body that no longer reads is a miss, and the fresh one replaces it.
+        if (value.ok) return value;
+      }
     }
 
     let lastError = new HttpError("network", url, `Request to ${url} was never attempted`);
@@ -132,18 +150,14 @@ export class HttpClient {
 
       const outcome = await this.attempt(url, options.headers ?? {});
       if (outcome.ok) {
-        const response = outcome.value;
-        if (cache !== undefined && options.cacheTtlMs !== undefined) {
-          await cache.set(url, {
-            status: response.status,
-            body: response.body,
-            fetchedAt: this.clock.now(),
-          });
-        }
-        return ok({ ...response, fromCache: false });
+        const value = read(outcome.value.body);
+        if (value.ok) await remember(outcome.value.status, outcome.value.body);
+        return value;
       }
 
       lastError = outcome.error.error;
+      // "Nothing here" is an answer too, and for a guessed slug it is the usual one.
+      if (lastError.status === NOT_FOUND) await remember(NOT_FOUND, "");
       if (!outcome.error.retryable || attempt === this.maxRetries) break;
       await this.clock.sleep(this.delayFor(attempt, outcome.error.retryAfterMs));
     }
@@ -180,23 +194,20 @@ export class HttpClient {
 
     if (response.ok) return ok({ status: response.status, body });
 
-    const retryable = response.status === 429 || response.status >= 500;
     const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"), this.clock.now());
+    const retryable =
+      (response.status === 429 || response.status >= 500) &&
+      (retryAfterMs === undefined || retryAfterMs <= this.maxDelayMs);
     return err({
       retryable,
       ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
-      error: new HttpError(
-        "status",
-        url,
-        `${url} responded with ${response.status}`,
-        response.status,
-      ),
+      error: statusError(url, response.status),
     });
   }
 
   /** Exponential backoff with full jitter, unless the server told us how long to wait. */
   private delayFor(attempt: number, retryAfterMs: number | undefined): number {
-    if (retryAfterMs !== undefined) return Math.min(retryAfterMs, this.maxDelayMs);
+    if (retryAfterMs !== undefined) return retryAfterMs;
     const ceiling = Math.min(this.baseDelayMs * 2 ** attempt, this.maxDelayMs);
     return Math.floor(ceiling / 2 + this.random() * (ceiling / 2));
   }
@@ -206,6 +217,10 @@ interface AttemptFailure {
   readonly retryable: boolean;
   readonly retryAfterMs?: number;
   readonly error: HttpError;
+}
+
+function statusError(url: string, status: number): HttpError {
+  return new HttpError("status", url, `${url} responded with ${status}`, status);
 }
 
 /** Retry-After is either a number of seconds or an HTTP date. */

@@ -25,6 +25,17 @@ Known gaps, found by running it against live data:
 - [ ] Exclusions are applied inside each source, so a company one source drops can still come through another that lacks the evidence.
       An excluded domain removes the YC entry, but a Hacker News post from the same company that links only its job board is listed.
 
+- [ ] Board slugs read from links in a Hacker News post are lowercased, but Lever slugs are case sensitive.
+      `jobs.lever.co/AIFund` works and `/aifund` is a 404, so those boards are never found.
+- [ ] The YC region filter is meant to keep companies with no known location, but every company in the live directory has at least a grouping tag, so that branch never runs.
+      Decide what unknown really looks like in the data and test against it.
+- [ ] The GitHub language summary counts at most 30 repos because it reads one page.
+      An org with more says "across 30 public repos", which is wrong.
+- [ ] Only the newest Who is hiring thread is read.
+      In the first hours of a month it is nearly empty, and the report does not say why Hacker News found so little.
+      Fall back to the previous thread while the new one is young.
+- [ ] Some Hacker News names are not companies: "Location: REMOTE", "SEEKING FREELANCER" and anonymous variants like "AI x Healthcare Startup".
+
 ## 2. Research
 
 - [ ] Evidence model: every fact carries a source URL and a fetched-at time.

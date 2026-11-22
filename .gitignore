@@ -9,3 +9,6 @@ coverage/
 
 # local pipeline state: cached responses, run output
 .outbound/
+
+# per-machine editor and tool settings
+.claude/settings.local.json

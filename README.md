@@ -2,16 +2,14 @@
 
 An outbound engagement pipeline I am building in the open.
 
-You give it an ideal customer profile.
-It goes and finds companies that fit, works out who to talk to and what they are building right now, and then runs a multi-step sequence where the phone call is handled by a voice agent rather than a person reading a script.
+You give it an ideal customer profile, or what we call an ICP!
+
+It goes and finds companies that fit, works out exactly who in the company to talk to and what they are building right now, and then runs a multi-step sequence where the phone call is handled by a voice agent rather than a person reading a script. Before the voice agent part is implemented, we will ensure that the outbound engagement pipeline, is built well.
 
 The voice side is deliberately modelled on how Sierra describes its own platform: declarative journeys, supervisors that watch the agent rather than a single giant prompt, a cascaded speech pipeline, and simulations that gate every release.
 I want to understand that design by building a small version of it end to end, on a problem where I can tell whether it works.
 
 ## Where it is today
-
-This is early.
-The honest status of each stage:
 
 | Stage     | What it does                                            | Status               |
 | --------- | ------------------------------------------------------- | -------------------- |
@@ -100,7 +98,7 @@ A source that fails is reported at the end of the run and never stops the others
 ### Writing an ICP
 
 [examples/icp.voice-support.yaml](examples/icp.voice-support.yaml) is a complete profile with comments.
-The parts that drive discovery today are `company.industries`, `company.keywords`, `company.techSignals`, `company.hiringSignals`, `company.employees`, `company.regions` and `exclusions`.
+The parts that drive discovery today are `company.keywords`, `company.techSignals`, `company.hiringSignals`, `company.employees`, `company.regions` and `exclusions`.
 If you already know some accounts you want, list them under `seeds` with their job board or GitHub slugs and they skip straight to enrichment.
 
 Unknown keys are rejected, so a typo is an error and not a criterion that silently does nothing.
@@ -122,8 +120,7 @@ A pipeline that contacts people needs rules that are not optional.
 
 - Only public data, fetched through documented endpoints, inside their rate limits.
 - Every claim in a dossier keeps a link to where it came from.
-- Nothing is sent and no call is placed unless a run is explicitly started in live mode.
-  Dry run is the default.
+- Nothing is sent and no call is placed unless a run is explicitly started in live mode. Dry run is the default.
 - Opt-outs and do-not-contact lists are checked before every step, not just the first one.
 
 ## Development

@@ -209,7 +209,10 @@ export class HttpClient {
     });
   }
 
-  /** Exponential backoff with full jitter, unless the server told us how long to wait. */
+  /**
+   * Exponential backoff with jitter over the upper half of each step, unless
+   * the server told us how long to wait.
+   */
   private delayFor(attempt: number, retryAfterMs: number | undefined): number {
     if (retryAfterMs !== undefined) return retryAfterMs;
     const ceiling = Math.min(this.baseDelayMs * 2 ** attempt, this.maxDelayMs);

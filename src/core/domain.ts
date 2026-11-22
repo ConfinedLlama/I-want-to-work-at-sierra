@@ -1,7 +1,8 @@
 /**
  * Companies show up under many spellings of the same address:
  * "https://www.Acme.com/careers", "acme.com", "ACME.COM.". We key everything
- * on the bare registrable host so those all collapse to one company.
+ * on the bare host so those all collapse to one company. A subdomain is kept:
+ * registrableDomain is what drops it.
  */
 export function normalizeDomain(input: string): string | undefined {
   let value = input.trim().toLowerCase();

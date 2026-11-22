@@ -100,7 +100,7 @@ A source that fails is reported at the end of the run and never stops the others
 ### Writing an ICP
 
 [examples/icp.voice-support.yaml](examples/icp.voice-support.yaml) is a complete profile with comments.
-The parts that drive discovery today are `company.keywords`, `company.techSignals`, `company.hiringSignals`, `company.employees`, `company.regions` and `exclusions`.
+The parts that drive discovery today are `company.industries`, `company.keywords`, `company.techSignals`, `company.hiringSignals`, `company.employees`, `company.regions` and `exclusions`.
 If you already know some accounts you want, list them under `seeds` with their job board or GitHub slugs and they skip straight to enrichment.
 
 Unknown keys are rejected, so a typo is an error and not a criterion that silently does nothing.

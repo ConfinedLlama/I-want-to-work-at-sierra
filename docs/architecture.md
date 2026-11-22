@@ -31,7 +31,7 @@ loadIcp ──► registry.discovery[] ──► mergeCandidates ──► rank 
 | `src/discovery` | Merging, ranking and the orchestrator                                                 |
 | `src/cli`       | Argument parsing, runtime wiring, output formatting                                   |
 
-Dependencies point one way: `cli` uses `discovery`, which uses `sources`, which use `http`, `text` and `core`.
+Dependencies point one way: `cli` uses `discovery`, which uses `sources`, which use `icp`, `http`, `text` and `core`.
 Nothing below `cli` reads the environment, the wall clock or the real network on its own.
 Those are passed in, which is what lets the whole pipeline run in tests with a fake clock and a stubbed fetch.
 
@@ -63,8 +63,8 @@ This is the difference between a prospect list and a list of companies that send
 ### Guessing is allowed, trusting a guess is not
 
 Job boards and GitHub are keyed by a slug the company chose.
-When the ICP or a link in a post gives us the slug, it is used as is.
-When we have to guess from the domain, GitHub results are only accepted if the org's website points back to the company's domain.
+When the ICP or a link in a post gives us the slug, it is trusted and nothing else is tried.
+When we have to guess from the domain or the name, GitHub results are only accepted if the org's website points back to the company's domain.
 
 ### Politeness is built into the client
 
@@ -75,7 +75,8 @@ An enrichment source that fails three times in a row is switched off for the res
 
 Unit tests sit next to the code as `*.test.ts`.
 Sources are tested against `StubFetch` with response shapes copied from the real APIs.
-`src/cli/main.test.ts` drives the CLI entry point with a stubbed runtime, which covers the path from arguments to printed report.
+`src/cli/main.test.ts` drives `run`, the function behind the executable, with a stubbed runtime, which covers the path from arguments to printed report.
+`src/cli/bin.test.ts` starts the executable itself, the way an installed bin is reached.
 
 Live runs against the real APIs are how the gaps listed in the roadmap were found.
 They are done by hand for now.

@@ -127,12 +127,13 @@ function toCandidate(
   const matched = matchTerms(text, terms);
   if (matched.length === 0) return undefined;
 
-  const { domain, slugs, sites } = classifyLinks(extractUrls(html), name);
+  const { domain, slugs, hosts } = classifyLinks(extractUrls(html), name);
   const description = rest.join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
   if (isExcluded(icp, { name, description: text })) return undefined;
   // An excluded domain rules the post out wherever it is linked. The company's
-  // own site is not always the link that ends up as its domain.
-  if (sites.some((site) => isExcluded(icp, { name, domain: site }))) return undefined;
+  // own site is not always the link that ends up as its domain, and for the
+  // owner of a host we never take as a company site it is the only link there is.
+  if (hosts.some((host) => isExcluded(icp, { name, domain: host }))) return undefined;
 
   return {
     name,
@@ -262,8 +263,8 @@ function nameMatch(domain: string, company: string): number {
  * board". A board link is as useful as a domain: it gives us the exact slug to
  * query later, with no guessing.
  *
- * `sites` is every linked site that could be the company's, whether or not it
- * is named for it.
+ * `hosts` is every host the post links to, including the ones that are never
+ * taken as a company's site.
  */
 export function classifyLinks(
   urls: readonly string[],
@@ -271,12 +272,12 @@ export function classifyLinks(
 ): {
   domain: string | undefined;
   slugs: CompanySlugs;
-  sites: readonly string[];
+  hosts: readonly string[];
 } {
   let domain: string | undefined;
   let best = NOT_NAMED;
   const slugs: { -readonly [K in keyof CompanySlugs]: string } = {};
-  const sites: string[] = [];
+  const hosts: string[] = [];
 
   for (const url of urls) {
     let parsed: URL;
@@ -286,6 +287,8 @@ export function classifyLinks(
       continue;
     }
     const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    const site = normalizeDomain(host);
+    if (site !== undefined) hosts.push(site);
 
     const platform = BOARD_HOSTS[host];
     if (platform !== undefined) {
@@ -302,9 +305,7 @@ export function classifyLinks(
     }
     if (NOT_A_COMPANY_SITE.some((other) => host === other || host.endsWith(`.${other}`))) continue;
 
-    const site = normalizeDomain(host);
     if (site === undefined) continue;
-    sites.push(site);
 
     // The first link wins among equals, but a site named exactly for the
     // company beats an earlier one that only resembles the name.
@@ -314,7 +315,7 @@ export function classifyLinks(
       best = match;
     }
   }
-  return { domain, slugs, sites };
+  return { domain, slugs, hosts };
 }
 
 /** decodeURIComponent throws on a stray "%". A slug with one is used as written. */

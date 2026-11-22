@@ -74,6 +74,11 @@ describe("ycSource", () => {
     ).toEqual([]);
   });
 
+  it("keeps companies that have gone public", async () => {
+    const found = await discover([company({ status: "Public" })]);
+    expect(found.map((candidate) => candidate.name)).toEqual(["Helpline"]);
+  });
+
   it("skips companies that match nothing", async () => {
     expect(
       await discover([

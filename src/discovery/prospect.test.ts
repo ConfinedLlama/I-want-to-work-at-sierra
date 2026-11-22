@@ -127,6 +127,49 @@ describe("mergeCandidates", () => {
     ]);
   });
 
+  it.each([
+    { order: "seed, directory, post", reversed: false },
+    { order: "post, directory, seed", reversed: true },
+  ])("merges one company seen under two names, arriving as $order", ({ reversed }) => {
+    const candidates = [
+      { ...from("seed", { name: "Acme Robotics", slugs: { lever: "acme-hq" } }), seeded: true },
+      from("yc", { name: "Acme", domain: "acme.com" }),
+      from("hackernews", { name: "Acme Robotics", domain: "acme.com" }),
+    ];
+    const prospects = mergeCandidates(reversed ? [...candidates].reverse() : candidates);
+    expect(prospects.map((prospect) => prospect.id)).toEqual(["acme.com"]);
+    expect(prospects[0]?.slugs).toEqual({ lever: "acme-hq" });
+    expect(prospects[0]?.seeded).toBe(true);
+  });
+
+  it.each([
+    { order: [0, 1, 2] },
+    { order: [0, 2, 1] },
+    { order: [1, 0, 2] },
+    { order: [1, 2, 0] },
+    { order: [2, 0, 1] },
+    { order: [2, 1, 0] },
+  ])("joins two names that a third candidate links, arriving as $order", ({ order }) => {
+    const candidates = [
+      from("hackernews", { name: "Acme", domain: "jobs.acme.com" }),
+      from("hackernews", { name: "Acme Talent", domain: "careers.acme.com" }),
+      from("hackernews", { name: "Acme", domain: "careers.acme.com" }),
+    ];
+    const prospects = mergeCandidates(order.flatMap((index) => candidates[index] ?? []));
+    expect(prospects.map((prospect) => prospect.id)).toEqual(["jobs.acme.com"]);
+  });
+
+  it("leaves a candidate with no domain on its own when two companies share its name", () => {
+    const candidates = [
+      from("hackernews", { name: "Mercury" }),
+      from("yc", { name: "Mercury", domain: "mercury.com" }),
+      from("yc", { name: "Mercury", domain: "mercury.io" }),
+    ];
+    const ids = (list: typeof candidates) => mergeCandidates(list).map((prospect) => prospect.id);
+    expect(ids(candidates)).toEqual(["name:mercury", "mercury.com", "mercury.io"]);
+    expect(ids([...candidates].reverse())).toEqual(["mercury.io", "mercury.com", "name:mercury"]);
+  });
+
   it("keeps a subdomain apart when the names differ", () => {
     const prospects = mergeCandidates([
       from("yc", { name: "Storefront", domain: "storefront.com" }),

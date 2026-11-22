@@ -126,6 +126,32 @@ describe("hackerNewsSource", () => {
     expect(found.map((candidate) => candidate.name)).toEqual(["Northwind"]);
   });
 
+  it("drops a post from the owner of an excluded host we never take as a domain", async () => {
+    const excluding = testIcp({
+      company: { keywords: ["customer support"], hiringSignals: ["voice"] },
+      exclusions: { domains: ["google.com", "rippling.com", "lever.co"] },
+    });
+    const { found } = await discover(
+      [
+        comment(
+          "13",
+          'Google | Voice Engineer | Remote<p><a href="https:&#x2F;&#x2F;www.google.com&#x2F;about&#x2F;careers">https://www.google.com/about/careers</a>',
+        ),
+        comment(
+          "14",
+          'Rippling | Voice Engineer | SF<p><a href="https:&#x2F;&#x2F;www.rippling.com&#x2F;careers">https://www.rippling.com/careers</a>',
+        ),
+        comment(
+          "15",
+          'Lever | Voice Engineer | Remote<p><a href="https:&#x2F;&#x2F;jobs.lever.co&#x2F;lever">https://jobs.lever.co/lever</a>',
+        ),
+        comment("11", "Northwind | Voice Engineer | Remote"),
+      ],
+      excluding,
+    );
+    expect(found.map((candidate) => candidate.name)).toEqual(["Northwind"]);
+  });
+
   it("does not fail on a comment field it never reads", async () => {
     const { found } = await discover([
       comment("12", "Quiet Co | Voice Engineer | Onsite", { story_id: "5000" }),
@@ -319,8 +345,8 @@ describe("classifyLinks", () => {
     ).toBe("scale.com");
   });
 
-  it("lists every linked site that could be the company's, named for it or not", () => {
-    const { domain, sites } = classifyLinks(
+  it("lists every host a post links to, whatever becomes of the link", () => {
+    const { domain, hosts } = classifyLinks(
       [
         "https://www.linkedin.com/company/alphabet",
         "https://abc.xyz/careers",
@@ -330,7 +356,12 @@ describe("classifyLinks", () => {
       "Alphabet",
     );
     expect(domain).toBe("alphabet.example");
-    expect(sites).toEqual(["abc.xyz", "alphabet.example"]);
+    expect(hosts).toEqual([
+      "linkedin.com",
+      "abc.xyz",
+      "boards.greenhouse.io",
+      "alphabet.example",
+    ]);
   });
 
   it("leaves the domain unset when every link is someone else's site", () => {

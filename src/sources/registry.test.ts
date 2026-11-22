@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { unwrap } from "../core/result.js";
-import { createRegistry, listSources, UnknownSourceError } from "./registry.js";
+import {
+  createRegistry,
+  listSources,
+  NoSourceSelectedError,
+  UnknownSourceError,
+} from "./registry.js";
 
 describe("createRegistry", () => {
   it("lists every source with a unique id", () => {
@@ -17,11 +22,19 @@ describe("createRegistry", () => {
 
   it("refuses ids it does not know rather than silently running nothing", () => {
     const result = createRegistry({ only: ["yc", "linkedin", "crunchbase"] });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toBeInstanceOf(UnknownSourceError);
-    expect(result.error.unknown).toEqual(["linkedin", "crunchbase"]);
-    expect(result.error.message).toContain('Unknown source "linkedin", "crunchbase"');
+    const error = result.ok ? undefined : result.error;
+    if (!(error instanceof UnknownSourceError)) throw new Error("expected an unknown source error");
+    expect(error.unknown).toEqual(["linkedin", "crunchbase"]);
+    expect(error.message).toContain('Unknown source "linkedin", "crunchbase"');
+  });
+
+  it.each([[[]], [[""]], [[" ", ""]]])("refuses a selection with no ids in it: %j", (only) => {
+    const result = createRegistry({ only });
+    const error = result.ok ? undefined : result.error;
+    expect(error).toBeInstanceOf(NoSourceSelectedError);
+    expect(error?.message).toBe(
+      "No source selected. Known: yc, hackernews, greenhouse, lever, ashby, github.",
+    );
   });
 
   it("describes every source well enough to show a user", () => {

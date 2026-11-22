@@ -71,8 +71,11 @@ export const ycSource: DiscoverySource = {
   },
 };
 
+/** What the directory calls a company still in business. The rest are Inactive or Acquired. */
+const OPERATING = new Set(["Active", "Public"]);
+
 function toCandidate(company: YcCompany, icp: Icp): CompanyCandidate | undefined {
-  if (company.status !== "Active") return undefined;
+  if (company.status == null || !OPERATING.has(company.status)) return undefined;
 
   const domain = company.website == null ? undefined : normalizeDomain(company.website);
   const description = [company.one_liner, company.long_description]

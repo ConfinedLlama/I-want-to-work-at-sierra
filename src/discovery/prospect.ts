@@ -46,30 +46,30 @@ interface Draft {
  * Merge candidates from every source into one prospect per company.
  *
  * Two candidates are the same company when their domains are equal, or when
- * their normalized names are equal and their domains do not disagree: one of
- * them has none, or both sit under one registered domain, as jobs.acme.com
- * and careers.acme.com do. Two unrelated domains under one name stay separate:
- * there really are two companies called Mercury.
+ * their normalized names are equal and both domains sit under one registered
+ * domain, as jobs.acme.com and careers.acme.com do. Two unrelated domains
+ * under one name stay separate: there really are two companies called Mercury.
+ * A candidate with no domain joins the company of its name when there is
+ * exactly one, and stays on its own when nothing says which of several it is.
+ *
+ * Who is who is settled from all candidates at once, so it does not depend on
+ * the order sources report in. The fields are then filled in arrival order,
+ * which does carry meaning: seeds come first and what they say wins.
  */
 export function mergeCandidates(candidates: readonly SourcedCandidate[]): Prospect[] {
-  const drafts: Draft[] = [];
-  const byDomain = new Map<string, Draft>();
-  const byName = new Map<string, Draft[]>();
+  const companyOf = groupByCompany(candidates.map(({ candidate }) => candidate));
+  const drafts = new Map<string, Draft>();
 
   for (const { source, candidate, seeded } of candidates) {
-    const nameKey = normalizeCompanyName(candidate.name);
-    if (nameKey === "" && candidate.domain === undefined) continue;
+    const company = companyOf(candidate);
+    if (company === undefined) continue;
 
-    let draft = candidate.domain === undefined ? undefined : byDomain.get(candidate.domain);
-    if (draft === undefined && nameKey !== "") {
-      draft = (byName.get(nameKey) ?? []).find((other) => sameSite(other.domain, candidate.domain));
-    }
-
+    let draft = drafts.get(company);
     if (draft === undefined) {
       draft = {
         name: candidate.name.trim(),
-        domain: candidate.domain,
-        nameKey,
+        domain: undefined,
+        nameKey: normalizeCompanyName(candidate.name),
         slugs: {},
         description: undefined,
         employees: undefined,
@@ -79,24 +79,62 @@ export function mergeCandidates(candidates: readonly SourcedCandidate[]): Prospe
         sources: [],
         seeded: false,
       };
-      drafts.push(draft);
-      if (nameKey !== "") byName.set(nameKey, [...(byName.get(nameKey) ?? []), draft]);
+      drafts.set(company, draft);
     }
 
     if (candidate.domain !== undefined) {
       draft.domain =
         draft.domain === undefined ? candidate.domain : frontDoor(draft.domain, candidate.domain);
-      byDomain.set(candidate.domain, draft);
     }
 
     absorb(draft, source, candidate, seeded === true);
   }
 
-  return drafts.map(finish);
+  return [...drafts.values()].map(finish);
 }
 
-function sameSite(a: string | undefined, b: string | undefined): boolean {
-  return a === undefined || b === undefined || registrableDomain(a) === registrableDomain(b);
+/**
+ * Work out which candidates are the same company. Returns a lookup from a
+ * candidate to a key shared by everything in its group, or to nothing when
+ * the candidate has neither a name nor a domain to go by.
+ */
+function groupByCompany(
+  candidates: readonly CompanyCandidate[],
+): (candidate: CompanyCandidate) => string | undefined {
+  // A link between two keys means "same company". Following the links up from
+  // any key ends at the one key that stands for its whole group.
+  const linkedTo = new Map<string, string>();
+  const groupOf = (key: string): string => {
+    let top = key;
+    for (let next = linkedTo.get(top); next !== undefined; next = linkedTo.get(top)) top = next;
+    return top;
+  };
+
+  const atDomain = (domain: string): string => `domain ${domain}`;
+  const namedUnder = (nameKey: string, home: string): string => `name ${nameKey} under ${home}`;
+
+  /** The registered domains each name was seen under. */
+  const homes = new Map<string, Set<string>>();
+  for (const candidate of candidates) {
+    const nameKey = normalizeCompanyName(candidate.name);
+    if (candidate.domain === undefined || nameKey === "") continue;
+
+    const home = registrableDomain(candidate.domain);
+    const site = groupOf(atDomain(candidate.domain));
+    const name = groupOf(namedUnder(nameKey, home));
+    if (site !== name) linkedTo.set(site, name);
+    homes.set(nameKey, (homes.get(nameKey) ?? new Set<string>()).add(home));
+  }
+
+  return (candidate) => {
+    if (candidate.domain !== undefined) return groupOf(atDomain(candidate.domain));
+
+    const nameKey = normalizeCompanyName(candidate.name);
+    if (nameKey === "") return undefined;
+    const seenUnder = [...(homes.get(nameKey) ?? [])];
+    const home = seenUnder.length === 1 ? seenUnder[0] : undefined;
+    return home === undefined ? `name ${nameKey}` : groupOf(namedUnder(nameKey, home));
+  };
 }
 
 /**

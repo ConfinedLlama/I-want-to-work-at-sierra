@@ -135,6 +135,13 @@ describe("cli", () => {
     expect(errOut).toContain('Unknown source "linkedin"');
   });
 
+  it.each(["", ",", " , "])("rejects --only %j, which selects nothing", async (only) => {
+    expect(await run(["discover", "icp.json", "--only", only], io)).toBe(1);
+    expect(errOut).toContain("No source selected. Known: yc, hackernews");
+    expect(out).toBe("");
+    expect(stub.calls).toEqual([]);
+  });
+
   it("rejects a nonsensical --max", async () => {
     expect(await run(["discover", "icp.json", "--max", "0"], io)).toBe(1);
     expect(errOut).toContain("must be a positive whole number");

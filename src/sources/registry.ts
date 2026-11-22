@@ -14,7 +14,7 @@ export interface SourceRegistry {
 
 export interface RegistryOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
-  /** Restrict to these source ids. Unknown ids are reported, not ignored. */
+  /** Restrict to these source ids. Unknown ids and an empty selection are reported, not ignored. */
   readonly only?: readonly string[] | undefined;
 }
 
@@ -30,10 +30,18 @@ export class UnknownSourceError extends Error {
   }
 }
 
+/** A selection with no ids in it, as an unset shell variable passed to --only leaves behind. */
+export class NoSourceSelectedError extends Error {
+  override readonly name = "NoSourceSelectedError";
+  constructor(readonly known: readonly string[]) {
+    super(`No source selected. Known: ${known.join(", ")}.`);
+  }
+}
+
 /** Every source the pipeline knows about, wired with whatever the environment offers. */
 export function createRegistry(
   options: RegistryOptions = {},
-): Result<SourceRegistry, UnknownSourceError> {
+): Result<SourceRegistry, UnknownSourceError | NoSourceSelectedError> {
   const env = options.env ?? {};
   const all: SourceRegistry = {
     discovery: [ycSource, hackerNewsSource],
@@ -50,6 +58,8 @@ export function createRegistry(
     options.only.map((id) => id.trim().toLowerCase()).filter((id) => id !== ""),
   );
   const known = listSources(all).map((source) => source.id);
+  // Running with nothing selected would look just like finding nothing.
+  if (wanted.size === 0) return err(new NoSourceSelectedError(known));
   const unknown = [...wanted].filter((id) => !known.includes(id));
   if (unknown.length > 0) return err(new UnknownSourceError(unknown, known));
 

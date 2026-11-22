@@ -10,7 +10,7 @@ commands:
   test: scripts/check.sh test
 
 commit:
-  fix_message: "fix({{.Step}}): {{.Summary}}"
+  fix_message: "fix: {{.Summary}}"
   trailers: []
 
 pr:
